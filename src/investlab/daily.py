@@ -4,7 +4,7 @@ No order endpoints or external communications are called by run_cycle.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from email.message import EmailMessage
 from pathlib import Path
 import json
@@ -16,7 +16,7 @@ from . import service, verification
 from .core import atomic, connection, digest, utcnow
 
 STEPS = ("macro", "online", "audit", "verify", "evaluate")
-ALERT_STATES = frozenset({"FAILED", "DEGRADED"})
+ALERT_STATES = frozenset({"FAILED", "DEGRADED", "INTERRUPTED"})
 
 
 class DailyGateError(ValueError):
@@ -116,7 +116,7 @@ def run_cycle(home, *, update_macro=True, evaluate=True):
             report["issue_code"] = optional_errors[0]
         else:
             report["status"] = "SUCCEEDED"
-    except (ValueError, RuntimeError, OSError, TimeoutError) as exc:
+    except Exception as exc:
         report["status"] = "FAILED"
         report["issue_code"] = exc.code if isinstance(exc, DailyGateError) else {
             "preflight": "PREFLIGHT_ERROR", "macro": "MACRO_ERROR",
@@ -127,6 +127,11 @@ def run_cycle(home, *, update_macro=True, evaluate=True):
         if report["stage"] in report["steps"] and report["steps"][report["stage"]] == "PENDING":
             report["steps"][report["stage"]] = "FAILED"
         report["error_type"] = type(exc).__name__  # no raw exception, URLs or credentials
+    except BaseException as exc:
+        report["status"] = "INTERRUPTED"
+        report["issue_code"] = "DAILY_PROCESS_INTERRUPTED"
+        report["error_type"] = type(exc).__name__
+        raise
     finally:
         report["completed_at"] = utcnow()
         if report["status"] in ALERT_STATES and report["issue_code"] != "SYNTHETIC_DEMO_NOT_ELIGIBLE":
@@ -141,8 +146,17 @@ def current_status(home):
     if not path.exists():
         return {"status": "NOT_RUN", "trading_enabled": False, "meaning": "No private daily cycle has run"}
     report = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(report, dict) or report.get("status") not in {"RUNNING", "FAILED", "DEGRADED", "SUCCEEDED"}:
+    if not isinstance(report, dict) or report.get("status") not in {"RUNNING", "FAILED", "DEGRADED", "SUCCEEDED", "INTERRUPTED"}:
         raise ValueError("Invalid daily status document")
+    if report["status"] == "RUNNING":
+        try:
+            started = datetime.fromisoformat(report["started_at"])
+            if started.tzinfo is not None and datetime.now(timezone.utc) - started > timedelta(minutes=45):
+                return {**report, "status": "INTERRUPTED",
+                        "issue_code": "PREVIOUS_CYCLE_STILL_RUNNING_AFTER_TIMEOUT",
+                        "meaning": "Daily cycle has not completed within its expected timeout"}
+        except (ValueError, TypeError, KeyError):
+            raise ValueError("Invalid daily status timestamp") from None
     return report
 
 
