@@ -1,0 +1,241 @@
+"""Private, immutable Vercel Blob snapshots for one-account InvestLab cloud runs.
+
+Blob is used for append-only encrypted-at-rest private objects, not as a shared
+mutable SQLite server. This v1 adapter intentionally forbids concurrent writers.
+"""
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timezone
+from pathlib import Path
+import hashlib
+import io
+import json
+import os
+import sqlite3
+import tempfile
+import uuid
+import zipfile
+
+
+MAX_ARCHIVE_BYTES = 30 * 1024 * 1024
+MAX_UNPACKED_BYTES = 120 * 1024 * 1024
+STATE_FILES = frozenset({"settings.json", "data/monitor.sqlite3"})
+
+
+def now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _client():
+    from vercel.blob import AsyncBlobClient
+    return AsyncBlobClient()
+
+
+async def _list(prefix):
+    from vercel.blob import list_objects
+    def query():
+        all_objects = []
+        cursor = None
+        for _ in range(40):
+            kwargs = {"prefix": prefix, "limit": 1000}
+            if cursor:
+                kwargs["cursor"] = cursor
+            page = list_objects(**kwargs)
+            all_objects.extend(page.blobs)
+            if not page.has_more:
+                return all_objects
+            if not page.cursor or page.cursor == cursor:
+                raise RuntimeError("Blob list pagination made no progress")
+            cursor = page.cursor
+        raise RuntimeError("Blob list exceeds supported page count")
+    return await asyncio.to_thread(query)
+
+
+async def _read(pathname, *, max_size=MAX_ARCHIVE_BYTES):
+    result = await _client().get(pathname, access="private")
+    if result is None:
+        return None
+    if result.status_code != 200:
+        raise RuntimeError("Blob read returned an unexpected status")
+    data = bytearray()
+    async for chunk in result.stream:
+        data.extend(chunk)
+        if len(data) > max_size:
+            raise ValueError("Private Blob exceeds maximum allowed size")
+    return bytes(data)
+
+
+async def _write(prefix, content, suffix="json"):
+    # Each persisted version has its own immutable key; overwrites are forbidden.
+    name = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    path = f"{prefix}/{name}-{uuid.uuid4().hex}.{suffix}"
+    result = await _client().put(
+        path, content, access="private", add_random_suffix=False, overwrite=False,
+        content_type="application/zip" if suffix=="zip" else "application/json",
+    )
+    return result.pathname
+
+
+async def latest_json(prefix):
+    objs = await _list(prefix+"/")
+    names = sorted((obj.pathname for obj in objs if obj.pathname.endswith(".json")))
+    if not names:
+        return None
+    raw = await _read(names[-1], max_size=2_000_000)
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise ValueError("Invalid private report")
+    return data
+
+
+def _make_archive(home):
+    """Backup the SQLite connection rather than copying a WAL-backed database."""
+    home = Path(home)
+    database = home / "data/monitor.sqlite3"
+    settings = home / "settings.json"
+    if not settings.is_file() or not database.is_file():
+        raise ValueError("No initialized private account state")
+    with tempfile.TemporaryDirectory() as tmp:
+        copied = Path(tmp) / "monitor.sqlite3"
+        with sqlite3.connect(database) as source, sqlite3.connect(copied) as dest:
+            source.backup(dest)
+        manifest = {
+            "schema_version": 1, "created_at": now(),
+            "settings_sha256": hashlib.sha256(settings.read_bytes()).hexdigest(),
+            "sqlite_sha256": hashlib.sha256(copied.read_bytes()).hexdigest(),
+        }
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            z.write(settings, "settings.json")
+            z.write(copied, "data/monitor.sqlite3")
+            z.writestr("manifest.json", json.dumps(manifest, sort_keys=True))
+        data = output.getvalue()
+        if len(data) > MAX_ARCHIVE_BYTES:
+            raise ValueError("Private database snapshot exceeded size limit")
+        return data
+
+
+def _restore_archive(home, raw):
+    if len(raw) > MAX_ARCHIVE_BYTES:
+        raise ValueError("Private snapshot is too large")
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        members = {item.filename: item for item in z.infolist()}
+        if set(members) != (STATE_FILES | {"manifest.json"}):
+            raise ValueError("Unrecognized private snapshot contents")
+        if sum(v.file_size for v in members.values()) > MAX_UNPACKED_BYTES:
+            raise ValueError("Private snapshot expands beyond safe limit")
+        manifest = json.loads(z.read("manifest.json"))
+        if manifest.get("schema_version") != 1:
+            raise ValueError("Unsupported private snapshot version")
+        for name, check in (("settings.json","settings_sha256"), ("data/monitor.sqlite3","sqlite_sha256")):
+            raw_value = z.read(name)
+            if hashlib.sha256(raw_value).hexdigest() != manifest.get(check):
+                raise ValueError("Private snapshot integrity check failed")
+            target = Path(home) / name
+            target.parent.mkdir(parents=True,exist_ok=True)
+            target.write_bytes(raw_value)
+            os.chmod(target,0o600)
+        if not (Path(home)/"data/monitor.sqlite3").read_bytes().startswith(b"SQLite format 3\x00"):
+            raise ValueError("Private snapshot is not SQLite")
+
+
+async def load_private_home(home):
+    objects = await _list("state/")
+    names = sorted(obj.pathname for obj in objects if obj.pathname.endswith(".zip"))
+    if not names:
+        return False
+    raw = await _read(names[-1])
+    _restore_archive(home, raw)
+    return True
+
+
+async def save_private_home(home):
+    archive = await asyncio.to_thread(_make_archive, home)
+    return await _write("state", archive, "zip")
+
+
+async def save_private_report(report):
+    from investlab.core import canonical
+    return await _write("runs", canonical(report).encode("utf-8"))
+
+
+def _check_account(home):
+    from investlab import service
+    from investlab.core import connection
+    cfg = service.settings(home)
+    if cfg.get("demo") is not False:
+        raise ValueError("Only non-demo private accounts are permitted")
+    with connection(home,readonly=True) as c:
+        if not c.execute("SELECT 1 FROM portfolio_baselines LIMIT 1").fetchone():
+            raise ValueError("Confirmed private account valuation is required")
+
+
+def _compute(home):
+    from investlab import service, verification
+    _check_account(home)
+    calculated = service.run(home,online=True,independent=True)
+    if not calculated.get("qualified_online"):
+        raise ValueError("Live quotes were not independently qualified")
+    audited = service.audit(home)
+    if audited.get("status") != "PASS":
+        raise ValueError("Account/evidence audit failed")
+    verified = verification.verify(home)
+    if verified.get("status") != "PASS":
+        raise ValueError("Independent research verification failed")
+    outcomes = service.worker(home,"evaluate",timeout=120)
+    return {
+        "status": "SUCCEEDED", "completed_at": now(),
+        "review_id": calculated["review_id"],
+        "qualified_online": True,
+        "audit": "PASS", "research_verification": "PASS",
+        "matured_outcome_evaluation": "ATTEMPTED_NOT_PROOF",
+        "matured_outcomes": outcomes.get("research",{}).get("new_outcomes",0) if isinstance(outcomes,dict) else None,
+        "trading_enabled": False,
+    }
+
+
+async def run_private_daily():
+    """Fail closed with a stored report and leave previous state intact on errors."""
+    from investlab import service
+    report = {"status": "RUNNING", "started_at": now(), "trading_enabled":False}
+    with tempfile.TemporaryDirectory(prefix="investlab-cloud-") as tmp:
+        home = Path(tmp) / "private"
+        home.mkdir(mode=0o700)
+        try:
+            existing = await load_private_home(home)
+            if not existing:
+                report.update(status="SETUP_REQUIRED",issue_code="NO_PRIVATE_ACCOUNT_SNAPSHOT")
+                return report
+            result = await asyncio.to_thread(_compute, home)
+            saved = await save_private_home(home)
+            report.update(result, state_version=saved)
+        except Exception as exc:
+            report.update(status="FAILED",issue_code="CLOUD_DAILY_FAILED",
+                          failure_type=type(exc).__name__)
+        finally:
+            report["completed_at"] = now()
+            try:
+                report["report_version"] = await save_private_report(report)
+            except Exception:
+                # Never turn a persistence failure into success.
+                report["status"] = "FAILED"
+                report["issue_code"] = "CLOUD_PERSISTENCE_FAILED"
+        return report
+
+
+async def initialize_private_account(values, as_of, note):
+    """One-time private account bootstrap; refuses overwrite of existing state."""
+    from investlab import ledger, service
+    if await _list("state/"):
+        raise ValueError("Private cloud account already initialized; migration needed")
+    with tempfile.TemporaryDirectory(prefix="investlab-cloud-init-") as tmp:
+        home = Path(tmp) / "private"
+        await asyncio.to_thread(service.init, home, False)
+        event = {
+            "valuation_id": uuid.uuid4().hex,
+            "account": "default", "as_of": as_of, "currency": "CNY",
+            "values": values, "confirmed": True, "note": note
+        }
+        await asyncio.to_thread(ledger.valuation, home, event)
+        return await save_private_home(home)

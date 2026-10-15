@@ -116,6 +116,12 @@ The [validation record](docs/VALIDATION.md), dated **October 15, 2026**, reports
 
 Historical results help compare strategies, but do not predict future returns. The backtests include two simulated trading-fee levels, but exclude taxes and cash interest. Actual account results also depend on transactions, cash flows, and FX rates. See the [research methodology](docs/FORMULAS.md).
 
+## Isolated Vercel private cloud
+
+The separate `investlab-cloud` project uses Vercel Authentication and a private Blob store for immutable versioned account/operation snapshots; it does **not** expose personal data through the public synthetic demo. Cron scheduling remains disabled until real-account confirmation and private runtime verification are completed.
+
+[Private cloud architecture, bootstrap and verification](docs/VERCEL_CLOUD.md).
+
 ## Private daily monitoring and alerts
 
 `investlab daily-cycle` performs qualified online data collection, durable audits, independent research verification, and matured outcome evaluation. `investlab daily-status` reports each stage. Failures are persisted as private pending alerts; sending via `notify-pending` requires explicit private SMTP setup. The public Vercel demo never accesses this data.
