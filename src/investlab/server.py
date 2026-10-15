@@ -73,7 +73,7 @@ def handler(home, *, public_demo=False, public_hostname=None, local_edit=False, 
                         raise ValueError("请先确认估值来自真实账户记录")
                     with lock(home):
                         result = ledger.valuation(home, data)
-                    self.send_json(201, {"status": "SAVED", "valuation_id": result["valuation_id"], "trades_created": 0, "recalculate_required": True})
+                    self.send_json(201, {"status": "SAVED", "valuation_id": data["valuation_id"], "duplicate": result["duplicate"], "trades_created": 0, "recalculate_required": True})
                 else:
                     if set(data) != {"online"} or not isinstance(data["online"], bool):
                         raise ValueError("计算请求只接受布尔型online")
@@ -156,6 +156,6 @@ def serve(home, port=8765, *, public_demo=False, local_edit=False):
     server = ThreadingHTTPServer((bind_host, port), handler(
         home, public_demo=public_demo, public_hostname=public_hostname,
         local_edit=local_edit, csrf_token=token))
-    print(f"看板：{bind_host}:{server.server_port}（{"本地估值编辑" if local_edit else "只读"}；{'虚构公网演示' if public_demo else '本地'}）", flush=True)
+    print(f"看板：{bind_host}:{server.server_port}（{'本地估值编辑' if local_edit else '只读'}；{'虚构公网演示' if public_demo else '本地'}）", flush=True)
     try: server.serve_forever()
     finally: server.server_close()
