@@ -42,3 +42,21 @@ Alpaca 免费行情可能使用 IEX feed；IEX 是单一交易所，不代表全
 - [Alpaca Paper API](https://docs.alpaca.markets/us/reference/getallopenpositions)
 - [官方 Python SDK](https://github.com/alpacahq/alpaca-py)
 - [TQQQ 官方风险说明](https://www.proshares.com/our-etfs/leveraged-and-inverse/tqqq)
+
+## 单独核对行情（不上线、不改策略）
+
+有自己的模拟账户API Key，且已在本机保存真实价格历史时，可以执行：
+
+```bash
+investlab --home ~/.local/share/investlab alpaca-quote-check
+```
+
+工具会以 Alpaca **IEX 单交易所、日线、adjustment=all** 样本，和本机最近一个完整交易日的 QQQ/TQQQ 调整收盘价进行差异比较，并把报告保存在私有 `data/alpaca-quote-check.json`。这项读取不会覆盖原价格、生成买卖建议或改变投资信号。
+
+- `CONTEXT_AGREEMENT`：两只ETF的观察值在1%背景比较容差内，但不等于官方收盘价已独立确认。
+- `SOURCE_DISAGREEMENT`：至少一个差异超过1%，优先复核数据、交易日和复权口径。
+- `INCOMPLETE`：该交易日缺少至少一个IEX观察值；不能声称已验证。
+
+**限制**：IEX仅是单交易所，不是全市场SIP收盘行情；本地来源可能使用 Yahoo 历史复权价，不同供应商在企业行动调整和时点上可能不一致。1%为警示阈值，不应被当成实时交易的充分可靠性门槛。不同供应商在相同价格指标上的观测是补充证据，不是策略有效性验证。演示数据被明确拒绝进行真实行情核对。
+
+参考：[Alpaca 市场数据说明](https://docs.alpaca.markets/us/docs/market-data-faq)。

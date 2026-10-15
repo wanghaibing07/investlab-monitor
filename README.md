@@ -70,6 +70,19 @@ investlab --home ./runtime/demo audit
 - **研究方法**：参照 Public Equity Investing 的风险敞口、情景分析和证据分级原则。ChatGPT 的插件授权不会传给网站。
 - 具体使用方法、凭据和边界见 [Alpaca 模拟账户](docs/ALPACA_PAPER.md)。
 
+## 本地网页录入账户与重新计算
+
+无需编写JSON文件，也可以在本机网页上添加已确认的人民币资产估值：
+
+```bash
+investlab --home ~/.local/share/investlab init
+investlab --home ~/.local/share/investlab serve --local-edit
+```
+
+打开 `http://127.0.0.1:8765`，填写QQQ、TQQQ、QLD和现金估值，确认后保存。然后自行选择使用缓存行情计算或联网更新并核验行情。该操作**不会被记成买卖成交**，不会自动下单。首次初始化只执行一次；已有目录直接运行 `serve --local-edit` 即可。普通 `serve` 继续只读，公网演示版始终禁止编辑账户。
+
+[查看本地网页操作与安全边界](docs/LOCAL_WEB.md)。
+
 ## 使用自己的账户
 
 先用 [估值文件示例](examples/valuation.json) 填写你的真实资产金额，再运行：

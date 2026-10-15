@@ -70,6 +70,19 @@ The monitor uses a **200-day price trend and 20-day volatility**, alongside your
 - **Research method**: The evidence labels, exposure calculations and scenario caveats draw on Public Equity Investing risk workflows. ChatGPT plugin permissions are not shared with the site.
 - Details: [Alpaca paper account integration](docs/ALPACA_PAPER.md).
 
+## Edit confirmed valuations in the private local web app
+
+Opt in to local-only account editing, with explicit confirmation and no order submission:
+
+```bash
+investlab --home ~/.local/share/investlab init
+investlab --home ~/.local/share/investlab serve --local-edit
+```
+
+Visit `http://127.0.0.1:8765`, enter the confirmed CNY valuations for QQQ, TQQQ, QLD and cash, save, then explicitly request a cached or online verified recalculation. Valuations are not treated as executed trades. Run `init` only once; the default `serve` and the public Vercel site remain read-only.
+
+[Local web workflow and security](docs/LOCAL_WEB.md).
+
 ## Use your own account
 
 Fill in your actual asset values using the [valuation example](examples/valuation.json), then run:

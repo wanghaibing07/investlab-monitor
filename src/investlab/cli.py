@@ -28,12 +28,13 @@ def parser():
     sub.add_parser("refresh-macro", help="更新四组宏观解释变量")
     b = sub.add_parser("backup"); b.add_argument("--output")
     r = sub.add_parser("restore"); r.add_argument("archive"); r.add_argument("--to", required=True)
-    serve = sub.add_parser("serve"); serve.add_argument("--port", type=int, default=8765); serve.add_argument("--public-demo", action="store_true", help="仅允许使用虚构账户的公开只读展示")
+    serve = sub.add_parser("serve"); serve.add_argument("--port", type=int, default=8765); serve.add_argument("--public-demo", action="store_true", help="仅允许使用虚构账户的公开只读展示"); serve.add_argument("--local-edit", action="store_true", help="仅在本机开启需要明确确认的估值编辑和重新计算")
     ev = sub.add_parser("ledger-import"); ev.add_argument("file")
     ac = sub.add_parser("account"); ac.add_argument("name", default="default", nargs="?")
     val = sub.add_parser("valuation-import"); val.add_argument("file")
     export = sub.add_parser("export"); export.add_argument("--output", required=True)
     sub.add_parser("alpaca-paper-snapshot", help="只读保存Alpaca模拟账户风险快照（USD）")
+    sub.add_parser("alpaca-quote-check", help="用Alpaca IEX收盘样本核对本机最近完整行情（独立背景证据，不改信号）")
     sub.add_parser("summary")
     return p
 
@@ -44,7 +45,7 @@ def main(argv=None):
         if cmd == "serve":
             service.settings(home)
             from .server import serve
-            serve(home, args.port, public_demo=args.public_demo); return 0
+            serve(home, args.port, public_demo=args.public_demo, local_edit=args.local_edit); return 0
         if cmd == "alpaca-paper-snapshot":
             from .integrations.alpaca import snapshot
             record = snapshot()
@@ -62,6 +63,13 @@ def main(argv=None):
                 "other_symbols": record["other_symbols"],
                 "execution_enabled": False
             }
+        elif cmd == "alpaca-quote-check":
+            from .integrations.alpaca_market import check
+            with lock(home):
+                report = check(home)
+                path = home / "data" / "alpaca-quote-check.json"
+                atomic(path, report)
+            result = {**report, "saved": str(path)}
         elif cmd == "account": result = ledger.account(home, args.name)
         elif cmd == "summary":
             v = service.latest(home)
