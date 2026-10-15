@@ -1,0 +1,4 @@
+[
+  {"event_id":"example-001-deposit","account":"example-broker","occurred_at":"2026-10-14T08:00:00+08:00","kind":"DEPOSIT","currency":"USD","amount":"1000.00","confirmed":true,"note":"虚构示例"},
+  {"event_id":"example-002-buy","account":"example-broker","occurred_at":"2026-10-14T22:00:00+08:00","kind":"BUY","currency":"USD","symbol":"QQQ","quantity":"1","price":"500.00","fee":"1.00","confirmed":true,"note":"虚构价格；不用于实际下单"}
+]

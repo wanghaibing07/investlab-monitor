@@ -1,0 +1,51 @@
+{
+  "version": "5.5",
+  "policy_id": "user_qqq60_tqqq40_staged_review_v1",
+  "registered_at_bjt": "2026-10-15T14:19:44+08:00",
+  "scope": "MANUAL_ALLOCATION_REVIEW",
+  "allocation_source": "USER_CONFIRMED_TARGET_ALLOCATION_NOT_CONFIRMED_FILL",
+  "strategic_reference": {
+    "QQQ": 0.6,
+    "QLD": 0.0,
+    "TQQQ": 0.4,
+    "CASH": 0.0
+  },
+  "personal_suitability": "NOT_ASSESSED",
+  "core_drift_band": 0.05,
+  "tactical_drift_band": 0.02,
+  "tactical_add_step": 0.05,
+  "trend": {
+    "sma_sessions": 200,
+    "entry_buffer": 0.03,
+    "exit_buffer": 0.02
+  },
+  "volatility": {
+    "sessions": 20,
+    "entry_max_pct": 25.0,
+    "exit_at_pct": 35.0
+  },
+  "minimum_cash": 0.0,
+  "maximum_daily_ndx_exposure": 1.8,
+  "execution": "MANUAL_REVIEW_AFTER_CLOSE_FOR_NEXT_SESSION",
+  "auto_trading": false,
+  "risk_budget_source": "ALLOCATION_REFERENCE_NOT_A_PERSONAL_LOSS_BUDGET",
+  "parameter_search_trials": 0,
+  "comparisons": [
+    "FIXED60_40",
+    "CORE60_CASH40",
+    "STAGED60_40_TREND"
+  ],
+  "comparison_cost_bps": [
+    15,
+    50
+  ],
+  "historical_data_already_seen": true,
+  "alpha_or_optimality_claim": false,
+  "asset_universe": [
+    "QQQ",
+    "TQQQ"
+  ],
+  "tactical_pool": 0.4,
+  "tactical_split": "TQQQ_ONLY_USER_TARGET",
+  "target_confirmation_note": "2026-10-15用户明确调整目标为60%QQQ、40%TQQQ；未确认成交；沿用每次最多5个百分点的分步复核"
+}

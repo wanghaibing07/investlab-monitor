@@ -1,0 +1,16 @@
+services:
+  monitor:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      INVESTLAB_HOME: /var/lib/investlab
+    volumes:
+      - investlab-data:/var/lib/investlab
+    command: ["doctor"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: [/tmp]
+volumes:
+  investlab-data:

@@ -1,0 +1,10 @@
+[Unit]
+Description=Check the latest completed US session at 14:00 Shanghai time
+
+[Timer]
+OnCalendar=Tue..Sat *-*-* 14:00:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

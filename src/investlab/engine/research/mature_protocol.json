@@ -1,0 +1,68 @@
+{
+  "version": "5.5",
+  "experiment_id": "QQQ_TQQQ_60_40_FAMILIES_01",
+  "registered_at": "2026-10-15T04:35:08+08:00",
+  "models": [
+    "B_QQQ90",
+    "B_QQQ25",
+    "B_QQQ100",
+    "B_FIXED60_40",
+    "RP_QQQ_TQQQ",
+    "RP_VOL_TARGET_QQQ_TQQQ",
+    "VOL_TARGET_QQQ",
+    "TSMOM12_QQQ",
+    "TSMOM12_MULTI",
+    "MR_Z_OU_QQQ"
+  ],
+  "cost_bps_per_side": [
+    15,
+    50
+  ],
+  "covariance_sessions": 60,
+  "diagonal_shrinkage": 0.1,
+  "risky_weight_cap": 0.9,
+  "annual_vol_target": 0.12,
+  "momentum_sessions": 252,
+  "mean_reversion": {
+    "z_window": 20,
+    "ar_window": 60,
+    "entry_z": -2.0,
+    "exit_z": 0.0,
+    "max_holding_sessions": 10,
+    "maximum_sleeve": 0.25,
+    "half_life_max": 10,
+    "trend_sma": 200
+  },
+  "macro": {
+    "factors": [
+      "DFII10",
+      "T10YIE",
+      "DTWEXBGS",
+      "BAMLH0A0HYM2"
+    ],
+    "regression_window": 252,
+    "ridge": 0.1,
+    "minimum_observations": 120,
+    "point_in_time_vintages": false
+  },
+  "execution": "SIGNAL_CLOSE_T_EXECUTE_CLOSE_T_PLUS_1",
+  "monthly_rebalance": "LAST_MONTH_CLOSE_SIGNAL_FIRST_NEXT_MONTH_CLOSE_EXECUTION",
+  "cash_return": 0,
+  "margin_or_shorting": false,
+  "parameter_search_trials": 0,
+  "history_already_seen": true,
+  "actual_portfolio_mutation": false,
+  "asset_universe": [
+    "QQQ",
+    "TQQQ"
+  ],
+  "leverage_multipliers": {
+    "QQQ": 1,
+    "TQQQ": 3
+  },
+  "excluded_assets": [
+    "QLD",
+    "TLT",
+    "GLD"
+  ]
+}

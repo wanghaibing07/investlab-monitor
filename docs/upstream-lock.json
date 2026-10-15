@@ -1,0 +1,79 @@
+[
+  {
+    "repository": "OpenBB-finance/OpenBB",
+    "commit": "7c9d4221bdf66965e3f6c7f4dc6ee848073e5ae2",
+    "license_at_review": "Apache-2.0",
+    "files_read": [
+      "openbb_platform/core/openbb_core/provider/abstract/fetcher.py",
+      "openbb_platform/core/openbb_core/provider/abstract/provider.py"
+    ],
+    "adopted_design": "请求→采集→转换；数据源隔离",
+    "decision": "不为两只ETF引入整个平台"
+  },
+  {
+    "repository": "ghostfolio/ghostfolio",
+    "commit": "204f0d857ef258a2c090780bce8b69429a094f95",
+    "license_at_review": "AGPL-3.0",
+    "files_read": [
+      "apps/api/src/app/portfolio/calculator/portfolio-calculator.ts",
+      "apps/api/src/app/health/health.controller.ts"
+    ],
+    "adopted_design": "账户活动/估值/收益分离；存活和就绪分离",
+    "decision": "不复制AGPL计算器或引入Angular/NestJS"
+  },
+  {
+    "repository": "wealthfolio/wealthfolio",
+    "commit": "6773921aa77b8c97ef81ef78268525f24be288a4",
+    "license_at_review": "AGPL-3.0",
+    "files_read": [
+      "crates/portfolio-engine/src/model/performance.rs"
+    ],
+    "adopted_design": "收益质量、成本与估值状态明确建模",
+    "decision": "不复制Rust引擎或推算未知成本"
+  },
+  {
+    "repository": "QuantConnect/Lean",
+    "commit": "80e7843f645673bcbeaab963049f76f20f6785e1",
+    "license_at_review": "Apache-2.0",
+    "files_read": [
+      "Common/Algorithm/Framework/Portfolio/PortfolioTarget.cs",
+      "Algorithm/Execution/ImmediateExecutionModel.cs"
+    ],
+    "adopted_design": "目标、未完成订单、实际执行各自有身份",
+    "decision": "借鉴边界，不接入自动下单"
+  },
+  {
+    "repository": "microsoft/qlib",
+    "commit": "54355232463878d2eebb91fe0ee5fa7fa1f5976c",
+    "license_at_review": "MIT",
+    "files_read": [
+      "qlib/backtest/executor.py",
+      "qlib/backtest/exchange.py"
+    ],
+    "adopted_design": "策略与执行器、成交约束、费用假设分离",
+    "decision": "不将A股默认交易单位/最低佣金用于美股ETF"
+  },
+  {
+    "repository": "skfolio/skfolio",
+    "commit": "ec37c60aaf036d225fcc74933ff199c07cfb48da",
+    "license_at_review": "BSD-3-Clause",
+    "files_read": [
+      "src/skfolio/model_selection/_walk_forward.py",
+      "src/skfolio/optimization/convex/_risk_budgeting.py"
+    ],
+    "adopted_design": "按时间划分检验；风险预算独立约束",
+    "decision": "不把看过的历史分段称未见样本"
+  },
+  {
+    "repository": "kydchen/qqq-tqqq-signal-dashboard",
+    "commit": "53d2ed5c92ccae8ddc1bd9663ba289b66b2edeba",
+    "license_at_review": "MIT",
+    "files_read": [
+      "assets/execution.js",
+      "test/execution-planner.test.cjs",
+      "assets/app.js"
+    ],
+    "adopted_design": "手动计划与执行日志；费用和陈旧数据提示",
+    "decision": "不复制其估值/恐慌择时阈值"
+  }
+]

@@ -1,0 +1,9 @@
+{
+  "valuation_id": "replace-with-confirmed-valuation-id",
+  "account": "default",
+  "as_of": "2026-10-14",
+  "currency": "CNY",
+  "values": {"QQQ": "60000", "QLD": "0", "TQQQ": "0", "CASH": "40000"},
+  "confirmed": true,
+  "note": "虚构示例；导入前替换为自己确认的全部估值"
+}

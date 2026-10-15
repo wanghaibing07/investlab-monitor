@@ -1,0 +1,18 @@
+[Unit]
+Description=InvestLab daily monitoring (manual execution only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=investlab
+Group=investlab
+Environment=INVESTLAB_HOME=/var/lib/investlab
+ExecStart=/opt/investlab/.venv/bin/investlab run --online --independent-check --require-current
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/investlab
+PrivateTmp=true
+TimeoutStartSec=900
