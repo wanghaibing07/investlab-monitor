@@ -79,6 +79,28 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotIn("secret token",json.dumps(result))
         save.assert_not_awaited()
 
+    def test_private_account_verification_checks_real_restored_baseline(self):
+        from types import SimpleNamespace
+        archive = cloud._make_archive(self.home)
+        with (patch("investlab.cloud._list", new=AsyncMock(
+                    return_value=[SimpleNamespace(pathname="state/verified.zip")])),
+              patch("investlab.cloud._read", new=AsyncMock(
+                    return_value=archive))):
+            self.assertTrue(asyncio.run(cloud.private_account_verified()))
+
+    def test_private_account_verification_missing_snapshot_is_false(self):
+        with patch("investlab.cloud._list", new=AsyncMock(return_value=[])):
+            self.assertFalse(asyncio.run(cloud.private_account_verified()))
+
+    def test_private_account_verification_rejects_corruption(self):
+        from types import SimpleNamespace
+        with (patch("investlab.cloud._list", new=AsyncMock(
+                    return_value=[SimpleNamespace(pathname="state/bad.zip")])),
+              patch("investlab.cloud._read", new=AsyncMock(
+                    return_value=b"invalid archive"))):
+            with self.assertRaises(zipfile.BadZipFile):
+                asyncio.run(cloud.private_account_verified())
+
     def test_no_private_snapshot_never_claims_success(self):
         with (patch("investlab.cloud.load_private_home",new_callable=AsyncMock,return_value=False),
               patch("investlab.cloud.save_private_report",new_callable=AsyncMock,return_value="runs/not-ready.json"),
