@@ -73,7 +73,7 @@ def serve(home, port=8765, *, public_demo=False):
         public_hostname = os.environ.get("INVESTLAB_PUBLIC_HOSTNAME") or os.environ.get("RENDER_EXTERNAL_HOSTNAME")
         if not public_hostname:
             raise ValueError("公网演示缺少外部访问域名")
-        if any(ch in public_hostname for ch in ("/", ":", " ", "\\\"")):
+        if not all(ch.isalnum() or ch in ".-" for ch in public_hostname):
             raise ValueError("外部访问域名格式不正确")
     else:
         public_hostname = None
