@@ -9,6 +9,20 @@
 - Vercel Cron Jobs：在完成真实账户初始化、Cron 密钥及首次计算验收后启用，避免未配置时产生假的「每天运行成功」
 - Vercel Authentication：所有网站路径默认要求 Vercel 身份登录；账户创建另外需要管理密钥
 
+## 真实账户状态的判定
+
+`/health` 的 `storage_connected: true` **只表示已经加载 Blob 凭据**，不是数据读写已经验收；新增的 `storage_credentials_only: true` 明确标识这一点。
+
+打开登录保护下的 `/api/status` 可以检查真正的账户状态：
+
+- `SETUP_REQUIRED`、`account_initialized: false`、`storage_verified: true`：已成功查询私有 Blob，目前未找到已确认的账户快照，也没有日报
+- `READY_FOR_FIRST_RUN`、`account_initialized: true`：从私有 Blob 下载并校验了 SQLite 快照，已找到确认账户，但尚未产生日报
+- 有 `latest_run_exists: true`：存在独立的日报，仍需查看该报告自身是否 `SUCCEEDED`，不能仅凭账户存在认定正常运行
+- `STORAGE_ERROR`（503）：列表、下载、完整性或账户验证失败。不能把存储故障说成“账户没有初始化”
+- `STATE_INCONSISTENT`（503）：发现历史日报，但当前缺少有效的确认账户，需要人工修复
+
+这次状态检查只读取数据，不新增账户、不执行策略、不发送邮件。验证当前私有存储为空不等于“私有存储写入已验证”；首次保存确认账户后，需重新访问此接口检查持久化结果。
+
 ## 当前边界
 
 此路径面向**单账户、单写入者**初始阶段。私有 Blob 是版本化文件存储，**不是关系数据库事务引擎**。即使能保存 SQLite 备份，也不能在重叠的 Cron/手工写入时保证全局串行。实际连续运行前必须引入数据库事务锁（如 Vercel Marketplace Postgres）或经验证的互斥方案。禁止把真实账户数据写入静态构建、公开 Blob 或 GitHub。
