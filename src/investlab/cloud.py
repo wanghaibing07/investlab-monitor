@@ -143,6 +143,20 @@ async def load_private_home(home):
     return True
 
 
+async def private_account_verified():
+    """Read and validate actual private state; no inference from missing run reports.
+
+    Returns False if no snapshot exists. Storage/auth corruption raises instead of
+    reporting the account as absent. Never returns balances or private file names.
+    """
+    with tempfile.TemporaryDirectory(prefix="investlab-private-status-") as temp:
+        home = Path(temp) / "private"
+        if not await load_private_home(home):
+            return False
+        await asyncio.to_thread(_check_account, home)
+        return True
+
+
 async def save_private_home(home):
     archive = await asyncio.to_thread(_make_archive, home)
     return await _write("state", archive, "zip")
