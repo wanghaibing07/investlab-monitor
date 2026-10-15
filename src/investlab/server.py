@@ -2,13 +2,14 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import json
+import os
 import sqlite3
 from urllib.parse import urlsplit
 from .core import PACKAGE, canonical, connection
 from .service import latest
 
 
-def handler(home):
+def handler(home, *, public_demo=False, public_hostname=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):
             pass
@@ -19,7 +20,9 @@ def handler(home):
         def do_GET(self):
             route = urlsplit(self.path).path
             allowed_hosts = {"localhost", "127.0.0.1", "[::1]"}
-            host = self.headers.get("Host", "").rsplit(":", 1)[0]
+            if public_demo and public_hostname:
+                allowed_hosts.add(public_hostname.lower())
+            host = self.headers.get("Host", "").rsplit(":", 1)[0].lower()
             if host not in allowed_hosts:
                 self.send_error(403, "Invalid Host"); return
             try:
@@ -62,8 +65,20 @@ def handler(home):
     return Handler
 
 
-def serve(home, port=8765):
-    server = ThreadingHTTPServer(("127.0.0.1", port), handler(home))
-    print(f"看板：http://127.0.0.1:{server.server_port}（只读）", flush=True)
+def serve(home, port=8765, *, public_demo=False):
+    if public_demo:
+        from .service import settings
+        if settings(home).get("demo") is not True:
+            raise ValueError("公网部署只允许使用虚构演示账户")
+        public_hostname = os.environ.get("INVESTLAB_PUBLIC_HOSTNAME") or os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+        if not public_hostname:
+            raise ValueError("公网演示缺少外部访问域名")
+        if any(ch in public_hostname for ch in ("/", ":", " ", "\\\"")):
+            raise ValueError("外部访问域名格式不正确")
+    else:
+        public_hostname = None
+    bind_host = "0.0.0.0" if public_demo else "127.0.0.1"
+    server = ThreadingHTTPServer((bind_host, port), handler(home, public_demo=public_demo, public_hostname=public_hostname))
+    print(f"看板：{bind_host}:{server.server_port}（只读；{'虚构公网演示' if public_demo else '本地'}）", flush=True)
     try: server.serve_forever()
     finally: server.server_close()
