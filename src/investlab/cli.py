@@ -35,6 +35,11 @@ def parser():
     export = sub.add_parser("export"); export.add_argument("--output", required=True)
     sub.add_parser("alpaca-paper-snapshot", help="只读保存Alpaca模拟账户风险快照（USD）")
     sub.add_parser("alpaca-quote-check", help="用Alpaca IEX收盘样本核对本机最近完整行情（独立背景证据，不改信号）")
+    cycle = sub.add_parser("daily-cycle", help="完整私有每日执行：行情、审计、复算、效果到期评价及失败记录")
+    cycle.add_argument("--skip-macro", action="store_true")
+    cycle.add_argument("--skip-evaluate", action="store_true")
+    sub.add_parser("daily-status", help="查看上一次私有每日运行结果")
+    sub.add_parser("notify-pending", help="用私有SMTP配置发送待发失败或降级通知")
     sub.add_parser("summary")
     return p
 
@@ -70,6 +75,20 @@ def main(argv=None):
                 path = home / "data" / "alpaca-quote-check.json"
                 atomic(path, report)
             result = {**report, "saved": str(path)}
+        elif cmd == "daily-status":
+            from .daily import current_status
+            result = current_status(home)
+        elif cmd == "daily-cycle":
+            from .daily import run_cycle
+            with lock(home):
+                result = run_cycle(home, update_macro=not args.skip_macro,
+                                   evaluate=not args.skip_evaluate)
+        elif cmd == "notify-pending":
+            from .daily import dispatch_pending
+            if service.settings(home).get("demo"):
+                raise ValueError("虚构演示账户不允许发送正式监控告警")
+            with lock(home):
+                result = dispatch_pending(home)
         elif cmd == "account": result = ledger.account(home, args.name)
         elif cmd == "summary":
             v = service.latest(home)
@@ -113,6 +132,8 @@ def main(argv=None):
             print(json.dumps({k: v for k, v in result.items() if k not in ("curves", "comparisons")}, ensure_ascii=False, indent=2))
             print(f'独立复算：{len(result["comparisons"])}组规则与费用；完整结果在data/verification.json。')
         else: print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
+        if cmd == "daily-cycle" and result["status"] != "SUCCEEDED": return 2
+        if cmd == "notify-pending" and result["status"] == "DELIVERY_FAILED": return 2
         if cmd in ("audit", "verify") and result["status"] != "PASS": return 2
         if cmd == "run" and args.require_current and not result["qualified_online"]: return 2
         return 0

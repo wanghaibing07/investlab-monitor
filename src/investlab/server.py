@@ -96,7 +96,10 @@ def handler(home, *, public_demo=False, public_hostname=None, local_edit=False, 
                 self.send_error(403, "Invalid Host"); return
             try:
                 status = 200; kind = "application/json; charset=utf-8"
-                if route == "/api/local-session":
+                if route == "/api/daily-status" and not public_demo:
+                    from .daily import current_status
+                    payload = current_status(home)
+                elif route == "/api/local-session":
                     payload = {"local_edit": bool(local_edit), "read_only": not local_edit,
                                "csrf_token": csrf_token if local_edit else None}
                 elif route == "/health/live": payload = {"status": "UP"}

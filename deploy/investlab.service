@@ -8,11 +8,12 @@ Type=oneshot
 User=investlab
 Group=investlab
 Environment=INVESTLAB_HOME=/var/lib/investlab
-ExecStart=/opt/investlab/.venv/bin/investlab run --online --independent-check --require-current
+EnvironmentFile=-/etc/investlab/private.env
+ExecStart=/usr/bin/bash /opt/investlab/deploy/run-daily.sh
 UMask=0077
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/investlab
 PrivateTmp=true
-TimeoutStartSec=900
+TimeoutStartSec=1800

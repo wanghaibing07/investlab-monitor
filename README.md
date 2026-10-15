@@ -116,6 +116,19 @@ investlab --home ~/.local/share/investlab summary
 
 历史回测用于比较方法，不等于未来收益承诺。回测计入两档模拟交易费用，未计税费与现金利息；真实账户结果还取决于交易、资金流和汇率。完整假设见[研究方法](docs/FORMULAS.md)。
 
+## 每日自动运行与失败告警
+
+在自己的私有 Linux 主机上，可运行 `daily-cycle` 完成在线行情、持久化、独立复核、成熟结果评价与状态记录：
+
+```bash
+investlab --home ~/.local/share/investlab daily-cycle
+investlab --home ~/.local/share/investlab daily-status
+```
+
+失败和宏观数据降级会产生私有待发通知；仅配置 SMTP 后 `notify-pending` 才会发送邮件。默认不发送邮件，也不会把账户数据上传 Vercel。
+
+[查看定时任务、私有告警配置与故障恢复](docs/DAILY_OPERATIONS.md)。
+
 ## 常用命令
 
 使用同一个 `--home` 目录保存你的记录。
