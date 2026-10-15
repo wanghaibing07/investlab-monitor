@@ -23,6 +23,47 @@ jobs:
       - run: investlab --home /tmp/investlab-demo run
       - run: investlab --home /tmp/investlab-demo verify
       - run: investlab --home /tmp/investlab-demo audit
+      - name: Check actual public demo HTTP endpoints
+        env:
+          INVESTLAB_PUBLIC_HOSTNAME: investlab.example.test
+        run: |
+          investlab --home /tmp/investlab-demo serve --public-demo --port 8765 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" || true' EXIT
+          python - <<'PY'
+          import http.client
+          import json
+          import time
+
+          def request(method, path, host="investlab.example.test"):
+              conn = http.client.HTTPConnection("127.0.0.1", 8765, timeout=5)
+              conn.request(method, path, headers={"Host": host})
+              response = conn.getresponse()
+              status, body = response.status, response.read()
+              conn.close()
+              return status, body
+
+          for attempt in range(50):
+              try:
+                  status, body = request("GET", "/health/live")
+                  break
+              except OSError:
+                  time.sleep(0.1)
+          else:
+              raise AssertionError("public demo HTTP server did not start")
+          assert status == 200, status
+          assert json.loads(body)["status"] == "UP"
+          status, body = request("GET", "/health/ready")
+          assert status == 200 and json.loads(body)["status"] == "READY"
+          status, body = request("GET", "/api/latest")
+          assert status == 200 and json.loads(body)["demo"] is True
+          for route in ("/", "/app.js", "/style.css", "/api/research", "/api/history", "/api/journal"):
+              status, body = request("GET", route)
+              assert status == 200 and body, (route, status)
+          assert request("GET", "/api/latest", "untrusted.example.test")[0] == 403
+          assert request("POST", "/api/latest")[0] == 405
+          PY
+
       - run: python -m pip wheel --no-deps . -w /tmp/wheels
   container:
     runs-on: ubuntu-latest
