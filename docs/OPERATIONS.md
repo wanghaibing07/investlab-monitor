@@ -25,7 +25,7 @@ docker compose -f deploy/compose.yaml run --rm monitor init --demo
 docker compose -f deploy/compose.yaml run --rm monitor run
 ```
 
-容器模板运行CLI，数据使用持久卷。只读看板默认监听127.0.0.1；当前模板不把容器看板公开暴露，不假装端口映射后就能访问。优先在主机运行`serve`，通过SSH本地端口转发访问。CI将实际构建镜像并用同一持久卷跨容器运行演示、独立复核与审计；本地环境无Docker，实际成功结果以远端container job为准。
+容器模板运行CLI，数据使用持久卷。只读看板默认监听127.0.0.1；当前模板不把容器看板公开暴露，不假装端口映射后就能访问。优先在主机运行`serve`，通过SSH本地端口转发访问。固定digest镜像已在GitHub CI实际构建，并用同一持久卷跨容器完成演示、独立复核与审计；本地环境没有Docker。后续修改继续查看远端container job结果。
 
 ## 备份与恢复演练
 
