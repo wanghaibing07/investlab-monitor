@@ -63,6 +63,13 @@ investlab --home ./runtime/demo audit
 
 **重点：目标仓位不等于实际成交。** 程序不会因为出现调整建议就修改你的交易记录，也不会连接券商自动下单。只有导入已确认的账户数据，记录才会更新。
 
+## Alpaca 模拟账户与风险情景
+
+- **网页演示**：在「策略研究」页调整指数单日涨跌和 TQQQ 仓位，即时查看假设的单日组合敏感性，不下单。
+- **本地模拟券商接入**：`alpaca-paper-snapshot` 只读取 Alpaca Paper Trading 模拟账户和持仓，单独保存为美元风险快照；不修改人民币账户。
+- **研究方法**：参照 Public Equity Investing 的风险敞口、情景分析和证据分级原则。ChatGPT 的插件授权不会传给网站。
+- 具体使用方法、凭据和边界见 [Alpaca 模拟账户](docs/ALPACA_PAPER.md)。
+
 ## 使用自己的账户
 
 先用 [估值文件示例](examples/valuation.json) 填写你的真实资产金额，再运行：

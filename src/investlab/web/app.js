@@ -11,9 +11,14 @@ async function get(path){const r=await fetch(path,{cache:'no-store'});if(!r.ok)t
 function render(v){last=v;if(!v){text('headline','尚未生成报告');text('updated','在终端运行 investlab run，再刷新本页。');return;}
 const r=v.review,t=r.next_review_weights,current=r.current_baseline_weights;
 const attemptOK=v.latest_attempt?.status==='SUCCEEDED';
+const ageHours=(Date.now()-Date.parse(v.created_at))/3600000;
+const demoAgeLabel=v.demo
+  ? (Number.isFinite(ageHours)&&ageHours>36 ? '演示快照已超过36小时，不会自动更新' : '部署时生成的固定演示快照')
+  : (v.stale_for_today?'报告生成已超过36小时':'报告时间已记录');
+$('refresh').textContent=v.demo?'重新读取快照 ↻':'刷新记录 ↻';
 text('mode',v.demo?'虚构数据演示':v.qualified_online?'在线计算':'缓存复算');text('updated',`行情日 ${v.session_date} · 计算于 ${new Date(v.created_at).toLocaleString('zh-CN')} · ${v.version}`);
 const action=!attemptOK?'最近一轮失败或未完成，保留历史报告':v.demo?'演示：查看规则怎样改变仓位':!v.market_session_current?'行情落后于最新完整交易日':r.status==='ALLOCATION_REVIEW'?r.headline:r.status==='CACHE_REPLAY_ONLY'?'缓存复算，查看已满足的条件':'数据校验阻断了新判断';text('headline',action);text('reason',reasons[r.tactical_reason]||(r.blockers||[]).join('；')||'研究输出与真实交易分开保存。');
-$('flags').replaceChildren();for(const [label,warn] of [[v.demo?'全部行情均为虚构':'人工执行',false],[attemptOK?'最近一轮已保存并完成本地备份':'最近一轮失败或未完成',!attemptOK],[v.stale_for_today?'报告生成已超过36小时':'报告时间已记录',v.stale_for_today]])$('flags').append(element('span',label,'flag'+(warn?' warn':'')));
+$('flags').replaceChildren();for(const [label,warn] of [[v.demo?'全部行情均为虚构':'人工执行',false],[attemptOK?'最近一轮已保存并完成本地备份':'最近一轮失败或未完成',!attemptOK],[demoAgeLabel,v.demo?Number.isFinite(ageHours)&&ageHours>36:v.stale_for_today]])$('flags').append(element('span',label,'flag'+(warn?' warn':'')));
 text('account',new Intl.NumberFormat('zh-CN',{style:'currency',currency:'CNY',maximumFractionDigits:0}).format(v.portfolio.total_cny));text('account-date',`确认日期 ${v.portfolio.as_of}`);text('volatility',pct(v.risk.annual_volatility));text('continuity',v.demo?'演示不计数':`${v.distinct_verified_sessions} 个交易日`);text('operation',attemptOK?'计算、数据库回读与本地备份成功':'最近一轮未完成，请查看运行记录');
 $('allocations').replaceChildren();for(const s of ['QQQ','TQQQ','CASH']){const e=element('div',undefined,'allocation');e.append(element('strong',s==='CASH'?'现金':s));const bar=element('div',undefined,'bar'),inner=element('div');inner.style.width=`${(current?.[s]||0)*100}%`;bar.append(inner);e.append(bar,element('span',`${pct(current?.[s])} → ${pct(t?.[s])} → ${pct({QQQ:.6,TQQQ:.4,CASH:0}[s])}`));$('allocations').append(e);}
 text('account-warning',`账户截至 ${v.portfolio.as_of}。未确认新的估值或成交前，重复日报不会自动推进下一步；股数与成本未知时不推算实际盈亏。`);
@@ -27,4 +32,15 @@ function node(tag,attrs,label){const e=document.createElementNS(ns,tag);for(cons
 for(let i=0;i<5;i++){const value=max*i/4,y=top+height-height*i/4;node('line',{x1:left,y1:y,x2:left+width,y2:y,stroke:'#273548'});node('text',{x:0,y:y+4},value.toFixed(1));}
 Object.entries(curves).forEach(([name,series],j)=>{const points=series.equity.map((v,i)=>`${left+width*i/Math.max(1,series.equity.length-1)},${top+height-(v-min)/(max-min||1)*height}`).join(' ');node('polyline',{points,fill:'none',stroke:palette[j%palette.length],'stroke-width':2});const label=element('span'),dot=element('i');dot.style.background=palette[j%palette.length];label.append(dot,document.createTextNode(names[name]||name));legend.append(label);});const dates=all[0].dates;node('text',{x:left,y:290},dates[0]);node('text',{x:left+width-85,y:290},dates.at(-1));}
 async function load(){try{$('error').hidden=true;const [v,research,history,journal]=await Promise.all(['/api/latest','/api/research','/api/history','/api/journal'].map(get));render(v);table('models',(research.comparisons||[]).map(r=>[names[r.model_id]||r.model_id,r.cost_bps+' bp',r.summary.cagr_pct.toFixed(2)+'%',r.summary.max_drawdown_pct.toFixed(2)+'%',r.summary.annual_vol_pct.toFixed(2)+'%',r.max_relative_equity_error.toExponential(1)]));chart(research.curves||{});text('research-status',research.status==='PASS'?`独立复算通过：${research.comparisons.length}组比较，行情截至${research.data_end}。历史已用于开发，分段结果不冒充未见样本。`:'尚未完成独立复核。运行 investlab verify 后刷新。');table('operations',history.map(r=>[new Date(r.started_at).toLocaleString('zh-CN'),r.command,r.status,r.completed_at?new Date(r.completed_at).toLocaleString('zh-CN'):'未完成']));table('journal',journal.map(r=>[r.occurred_at,r.account,r.kind,r.symbol||'—',r.quantity||r.amount]));}catch(e){text('error',e.message);$('error').hidden=false;}}
+function renderScenario(){
+  const shock=Number($('scenario-index').value),tqqq=Number($('scenario-tqqq').value)/100;
+  const qqq=1-tqqq, exposure=qqq+3*tqqq, impact=exposure*shock;
+  text('scenario-index-label',shock>0?'+'+shock+'%':shock+'%');
+  text('scenario-tqqq-label',Math.round(tqqq*100)+'%');
+  text('scenario-weights',Math.round(qqq*100)+'% / '+Math.round(tqqq*100)+'%');
+  text('scenario-exposure',exposure.toFixed(2)+'倍');
+  text('scenario-impact',(impact>0?'+':'')+impact.toFixed(1)+'%');
+}
+for(const id of ['scenario-index','scenario-tqqq'])$(id).addEventListener('input',renderScenario);
+renderScenario();
 for(const b of document.querySelectorAll('.tab'))b.addEventListener('click',()=>{for(const p of document.querySelectorAll('.panel'))p.hidden=p.id!==b.dataset.tab;for(const t of document.querySelectorAll('.tab'))t.classList.toggle('active',t===b);});$('refresh').addEventListener('click',load);$('copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('summary').textContent);text('copy','已复制');}catch{text('copy','请选中文本复制');}});load();

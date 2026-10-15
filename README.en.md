@@ -63,6 +63,13 @@ The monitor uses a **200-day price trend and 20-day volatility**, alongside your
 
 **A target is not a completed trade.** Suggestions do not change your transaction records, and the application does not send orders to a broker. Account records change only when you import confirmed information.
 
+## Alpaca paper account and risk scenarios
+
+- **Interactive demo**: Adjust a hypothetical daily index change and TQQQ allocation in Strategy Research. No orders are possible.
+- **Local paper integration**: `alpaca-paper-snapshot` reads only Alpaca Paper Trading balances and positions into a separate private USD report. Your local CNY portfolio is untouched.
+- **Research method**: The evidence labels, exposure calculations and scenario caveats draw on Public Equity Investing risk workflows. ChatGPT plugin permissions are not shared with the site.
+- Details: [Alpaca paper account integration](docs/ALPACA_PAPER.md).
+
 ## Use your own account
 
 Fill in your actual asset values using the [valuation example](examples/valuation.json), then run:
