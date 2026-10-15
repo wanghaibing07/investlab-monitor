@@ -33,6 +33,7 @@ def parser():
     ac = sub.add_parser("account"); ac.add_argument("name", default="default", nargs="?")
     val = sub.add_parser("valuation-import"); val.add_argument("file")
     export = sub.add_parser("export"); export.add_argument("--output", required=True)
+    sub.add_parser("alpaca-paper-snapshot", help="只读保存Alpaca模拟账户风险快照（USD）")
     sub.add_parser("summary")
     return p
 
@@ -44,7 +45,24 @@ def main(argv=None):
             service.settings(home)
             from .server import serve
             serve(home, args.port, public_demo=args.public_demo); return 0
-        if cmd == "account": result = ledger.account(home, args.name)
+        if cmd == "alpaca-paper-snapshot":
+            from .integrations.alpaca import snapshot
+            record = snapshot()
+            output = home / "data" / "alpaca-paper-snapshot.json"
+            atomic(output, record)
+            result = {
+                "status": record["status"],
+                "source": record["source"],
+                "saved": str(output),
+                "currency": record["currency"],
+                "equity_usd": record["equity_usd"],
+                "known_weights": record["known_weights"],
+                "known_daily_index_exposure_proxy": record["known_daily_index_exposure_proxy"],
+                "scenario_coverage": record["scenario_coverage"],
+                "other_symbols": record["other_symbols"],
+                "execution_enabled": False
+            }
+        elif cmd == "account": result = ledger.account(home, args.name)
         elif cmd == "summary":
             v = service.latest(home)
             if not v: raise ValueError("尚无已保存报告")
