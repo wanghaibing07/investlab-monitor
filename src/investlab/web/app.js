@@ -43,4 +43,51 @@ function renderScenario(){
 }
 for(const id of ['scenario-index','scenario-tqqq'])$(id).addEventListener('input',renderScenario);
 renderScenario();
-for(const b of document.querySelectorAll('.tab'))b.addEventListener('click',()=>{for(const p of document.querySelectorAll('.panel'))p.hidden=p.id!==b.dataset.tab;for(const t of document.querySelectorAll('.tab'))t.classList.toggle('active',t===b);});$('refresh').addEventListener('click',load);$('copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('summary').textContent);text('copy','已复制');}catch{text('copy','请选中文本复制');}});load();
+for(const b of document.querySelectorAll('.tab'))b.addEventListener('click',()=>{for(const p of document.querySelectorAll('.panel'))p.hidden=p.id!==b.dataset.tab;for(const t of document.querySelectorAll('.tab'))t.classList.toggle('active',t===b);});$('refresh').addEventListener('click',load);$('copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('summary').textContent);text('copy','已复制');}catch{text('copy','请选中文本复制');}});let localToken=null;
+async function initLocalEditor(){
+  try{
+    const response=await fetch('/api/local-session',{cache:'no-store'});
+    if(!response.ok)return;
+    const state=await response.json();
+    if(!state.local_edit || typeof state.csrf_token!=='string')return;
+    localToken=state.csrf_token;
+    $('local-editor').hidden=false;
+    $('local-as-of').value=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+  }catch{ /* Public static demo has no private editing API. */ }
+}
+function localBusy(busy){
+  for(const id of ['local-save','local-run-cached','local-run-online'])$(id).disabled=busy;
+}
+async function localPost(path,body){
+  if(!localToken)throw new Error('仅允许在已开启私有编辑的本地页面操作');
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-InvestLab-CSRF':localToken},body:JSON.stringify(body)});
+  const v=await r.json();
+  if(!r.ok)throw new Error(v.error||'操作失败 '+r.status);
+  return v;
+}
+$('valuation-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!e.currentTarget.reportValidity())return;
+  const values={QQQ:$('local-qqq').value,TQQQ:$('local-tqqq').value,QLD:$('local-qld').value,CASH:$('local-cash').value};
+  const total=Object.values(values).reduce((a,b)=>a+Number(b),0);
+  if(!Number.isFinite(total)||total<=0){text('local-status','请填写大于0的总资产估值');return;}
+  const payload={valuation_id:crypto.randomUUID(),account:'default',as_of:$('local-as-of').value,
+    currency:'CNY',values,confirmed:$('local-confirm').checked,note:$('local-note').value.trim()};
+  localBusy(true);text('local-status','正在保存已确认估值…');
+  try{await localPost('/api/valuation',payload);text('local-status','估值已保存；尚未重新计算。请点击下方计算按钮。');$('local-confirm').checked=false;}
+  catch(err){text('local-status','保存失败：'+err.message);}
+  finally{localBusy(false);}
+});
+for(const [id,online] of [['local-run-cached',false],['local-run-online',true]]){
+  $(id).addEventListener('click',async()=>{
+    localBusy(true);text('local-status',online?'正在获取并核验行情，然后保存计算结果…':'正在使用已保存的行情计算…');
+    try{
+      const result=await localPost('/api/recalculate',{online});
+      await load();
+      text('local-status',result.qualified_online?'在线计算完成，结果已更新。':'计算完成；请核对数据是否及时，未把缓存结果认定为在线行情。');
+    }catch(err){text('local-status','计算失败：'+err.message);}
+    finally{localBusy(false);}
+  });
+}
+initLocalEditor();
+load();
