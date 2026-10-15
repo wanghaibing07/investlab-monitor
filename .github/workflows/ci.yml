@@ -64,6 +64,30 @@ jobs:
           assert request("POST", "/api/latest")[0] == 405
           PY
 
+      - name: Export and audit Vercel public demo
+        if: matrix.python == '3.11'
+        run: |
+          python scripts/build_vercel_demo.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          dist = Path("dist")
+          expected = {"index.html", "app.js", "style.css", "data/latest.json", "data/research.json", "data/history.json", "data/journal.json"}
+          found = {str(p.relative_to(dist)) for p in dist.rglob("*") if p.is_file()}
+          assert found == expected, (found, expected)
+          report = json.loads((dist / "data/latest.json").read_text())
+          study = json.loads((dist / "data/research.json").read_text())
+          assert report["demo"] is True
+          assert report["operation"]["status"] == "SUCCEEDED"
+          assert study["status"] == "PASS"
+          assert json.loads((dist / "data/journal.json").read_text()) == []
+          assert "公开演示" in (dist / "index.html").read_text()
+          config = json.loads(Path("vercel.json").read_text())
+          assert config["outputDirectory"] == "dist"
+          assert {r["source"] for r in config["rewrites"]} == {"/api/latest", "/api/research", "/api/history", "/api/journal"}
+          print("PUBLIC_EXPORT_PASS", len(study.get("comparisons", [])))
+          PY
+
       - run: python -m pip wheel --no-deps . -w /tmp/wheels
   container:
     runs-on: ubuntu-latest
