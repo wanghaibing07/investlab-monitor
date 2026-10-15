@@ -43,6 +43,25 @@ jobs:
           cp deploy/cloud/app.py "$dest/app.py"
           cp deploy/cloud/vercel.json "$dest/vercel.json"
           cp deploy/cloud/requirements.txt "$dest/requirements.txt"
+          # The Vercel Python builder prioritizes root pyproject.toml; it must
+          # explicitly include cloud-only packages, not just requirements.txt.
+          CLOUD_OUT="$dest" python - <<'PY'
+          from pathlib import Path
+          import os, tomllib
+          root=Path(os.environ["CLOUD_OUT"])
+          pyproject=root/"pyproject.toml"
+          text=pyproject.read_text(encoding="utf-8")
+          needle="dependencies = []"
+          assert text.count(needle)==1, "Cannot safely modify cloud dependency manifest"
+          text=text.replace(needle,
+              'dependencies = ["fastapi>=0.117.1,<1", "vercel>=0.5.0,<1"]',1)
+          pyproject.write_text(text, encoding="utf-8")
+          data=tomllib.loads(text)
+          deps=data["project"]["dependencies"]
+          assert any(x.startswith("fastapi>=") for x in deps)
+          assert any(x.startswith("vercel>=") for x in deps)
+          print("VERCEL_CLOUD_PYPROJECT_DEPS_PRESENT")
+          PY
           CLOUD_OUT="$dest" python - <<'PY'
           from pathlib import Path
           import os
@@ -61,6 +80,18 @@ jobs:
               if p.suffix in (".env",".sqlite3",".db",".zip",".pem",".key"):
                   raise RuntimeError("Private data extension entered cloud build")
           print("PRIVATE_ONLY_CODE_FILES",len(files))
+          PY
+      - name: Test the exact staged manifest in a clean Python environment
+        run: |
+          set -eu
+          python -m venv "$RUNNER_TEMP/investlab-cloud-env"
+          "$RUNNER_TEMP/investlab-cloud-env/bin/python" -m pip install --disable-pip-version-check "$RUNNER_TEMP/investlab-cloud-site"
+          "$RUNNER_TEMP/investlab-cloud-env/bin/python" - <<'PY'
+          from fastapi import FastAPI
+          from vercel.blob import AsyncBlobClient
+          from investlab import cloud
+          assert FastAPI and AsyncBlobClient
+          print("CLOUD_STAGED_DEPS_IMPORT_PASS")
           PY
       - name: Publish inspected immutable build branch
         run: |
