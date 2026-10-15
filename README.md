@@ -1,14 +1,22 @@
-# InvestLab · QQQ / TQQQ 长期投资监控
+[简体中文](README.md) · [English](README.en.md)
 
-[![tests](https://github.com/wanghaibing07/investlab-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/wanghaibing07/investlab-monitor/actions/workflows/ci.yml)
+# InvestLab
 
-Local-first portfolio monitoring, quantitative research, independent verification, and recoverable evidence journals.
+**QQQ / TQQQ 长期投资监控与量化研究。账户、判断、计算和证据，一处追溯。**
 
-把**账户事实、每日判断、量化研究和运行证据**放进同一个可追溯的系统。
+[![CI](https://github.com/wanghaibing07/investlab-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/wanghaibing07/investlab-monitor/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-默认长期目标 **60% QQQ + 40% TQQQ**。保留每次最多增加总资产5个百分点的TQQQ分步规则，以及趋势/波动退出条件。所有建议由人决定是否执行；程序没有券商下单接口。
+InvestLab 是一个数据保存在本地的投资监控工具：导入已确认的账户记录，更新完整收盘行情，生成分步配置建议，比较策略，并保存可回放的计算证据。配有命令行和只读网页看板，核心运行无需第三方 Python 库、模型 API 或云服务账号。
 
-## 五分钟体验
+默认长期目标为 **60% QQQ + 40% TQQQ**。每次增加 TQQQ 的建议以最后确认持仓为起点，最多增加总资产的 5 个百分点，并结合趋势与波动条件。最终交易由人执行。
+
+[快速体验](#快速体验) · [核心能力](#核心能力) · [使用自己的账户](#使用自己的账户) · [文档](#文档) · [参与贡献](CONTRIBUTING.md)
+
+## 快速体验
+
+需要 **Python 3.11 或更高版本**。以下使用独立目录中的固定虚构账户和行情，无需联网获取市场数据。
 
 ```bash
 git clone https://github.com/wanghaibing07/investlab-monitor.git
@@ -16,87 +24,109 @@ cd investlab-monitor
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install .
-investlab --home /tmp/investlab-demo init --demo
-investlab --home /tmp/investlab-demo run
-investlab --home /tmp/investlab-demo verify
-investlab --home /tmp/investlab-demo serve
+
+investlab --home ./runtime/demo init --demo
+investlab --home ./runtime/demo run
+investlab --home ./runtime/demo serve
 ```
 
-打开 http://127.0.0.1:8765 。看板包括今日判断、账户到目标的差距、策略净值对照、流水和运行记录。演示行情和账户均为固定、可复现的虚构样本，醒目标明，不调用网络。
+打开 **http://127.0.0.1:8765**，查看今日判断、账户到目标的差距、策略净值比较、流水和运行记录。演示页面会标明虚构数据；按 `Ctrl+C` 停止服务。`runtime/` 已由 Git 忽略。
 
-Windows使用 `.venv\Scripts\activate`；数据目录可改成自己的路径。Python 3.11及以上，核心运行不需要第三方库或模型API。
+Windows PowerShell 将激活命令替换为 `.\.venv\Scripts\Activate.ps1`，其余命令相同；也可以直接调用 `.\.venv\Scripts\investlab.exe`。当前命令行和看板以中文为主，英文首页提供项目与使用说明。
 
-## 接入自己的账户
+另开终端，激活同一虚拟环境后可复核演示计算：
+
+```bash
+investlab --home ./runtime/demo verify
+investlab --home ./runtime/demo audit
+```
+
+`verify` 重放 20 组策略与费用组合，完整结果保存在 `runtime/demo/data/verification.json`。
+
+## 核心能力
+
+| 能力 | 实际用途 |
+| --- | --- |
+| 完整收盘行情 | 获取 QQQ/TQQQ 原始与复权收盘，保留供应商原文和哈希，识别未完成日线、过期数据与来源冲突 |
+| 真实账户记录 | 分开保存已确认流水与独立估值；十进制金额、同 ID 去重、冲突整批回滚；通过追加纠正保留原始记录 |
+| 分步配置判断 | 使用 200 日趋势缓冲与 20 日波动条件，区分长期目标、本轮建议和实际持仓；重复日报不会被记为成交 |
+| 策略与情景研究 | 比较固定 60/40、QQQ 基准、风险平价、波动目标、均值回归与动量等十类策略；提供宏观敏感度、事件概率和路径推演 |
+| 独立数值复核 | 用另一套费用求解方法重放净值，对照两资产风险平价解析解，检查未来数据是否改变过去信号 |
+| 可恢复的运行证据 | SQLite 账本、源码与输入快照、单写者锁、失败记录、一致性备份和核验后恢复 |
+| 本地界面与部署 | 只读网页看板、可安装 Python 包、容器和 systemd 模板，以及多版本 GitHub CI |
+
+## 使用自己的账户
+
+将真实运行数据放在源码仓库之外。先按自己的已确认数据创建估值文件，格式见 [valuation.json](examples/valuation.json)；示例中的账户均为虚构。
 
 ```bash
 investlab --home ~/.local/share/investlab init
-# 按自己确认的真实数据修改文件后再导入
 investlab --home ~/.local/share/investlab valuation-import my-valuation.json
 investlab --home ~/.local/share/investlab run --online --independent-check --require-current
 investlab --home ~/.local/share/investlab summary
 ```
 
-估值格式见 [examples/valuation.json](examples/valuation.json)。金额是人民币聚合估值，不等于已知股数或成本。缺少确认估值时，系统不会填入演示账户。
+首次运行前必须填写自己的估值文件。聚合估值不会被推算成股数、成本或成交。真实流水另用 `ledger-import` 导入，格式见 [events.json](examples/events.json)。
 
-已有v5.5完整目录可直接迁移到空目录：
+行情必须覆盖最新已完成的美股交易日；来源冲突会阻止新配置。两个 Yahoo 端点仍属于同一供应商，备用来源失败会单独显示。宏观因子用于解释风险，单独获取失败不阻断 ETF 监控。
+
+已有 v5.5 完整项目可迁移到新目录，原账本保留不动：
 
 ```bash
 investlab --home /private/investlab migrate /path/to/qqq-tqqq-clean
 investlab --home /private/investlab audit
 ```
 
-迁移原样保留全部SQLite旧表、每一行历史记录和必要研究证据，并记录迁移前后各表内容哈希。原数据库不会修改。旧的估值不会伪造为成交。
+迁移逐表核对历史内容哈希，保留报告、账户基线与研究证据。运行、调度和恢复方式见[操作手册](docs/OPERATIONS.md)。
 
 ## 日常命令
 
+所有命令使用同一个 `--home` 数据目录；`--json` 放在子命令之前，可获得机器可读结果。
+
 | 命令 | 用途 |
-|---|---|
-| `run --online --independent-check --require-current` | 下载完整收盘行情，计算、保存、回读和核验本地备份；数据不完整返回非零码 |
-| `run` | 缓存复算；不会被标为本次联网成功 |
-| `summary` | 适合每日通知的中文短结论 |
-| `refresh-macro` | 单独更新四个宏观解释因子，失败不拦截ETF账户报告 |
-| `research` | 概率、路径推演和十条成熟策略的完整研究报告 |
-| `verify` | 独立费用算法复算20组回测，检验未来数据对过去信号的影响 |
-| `ledger-import FILE` | 原子导入已确认流水；同ID重试去重，内容冲突拒绝 |
-| `account NAME` | 查看流水重放后的现金、股数、加权平均成本和已实现损益 |
-| `valuation-import FILE` | 记录独立账户估值；不创造交易 |
-| `audit` | 数据库、关系、历史报告、模型证据、账户记录哈希检查 |
-| `freeze` | 冻结当前代码与数据截止日，之后开始积累前瞻证据 |
-| `backup --output FILE.zip` | 一致性数据库快照＋研究证据＋逐文件哈希 |
-| `restore FILE.zip --to EMPTY_DIRECTORY` | 核验后恢复到空目录；拒绝覆盖运行账本 |
-| `serve` | 仅本机监听的只读看板；无HTTP写入接口 |
-| `doctor` | 检查版本、运行目录、数据库与账户初始化状态 |
-| `export --output FILE.json` | 导出当前报告，文件含私人数据 |
+| --- | --- |
+| `run --online --independent-check --require-current` | 更新行情、计算、存档、回读与核验本地备份；数据不合格时非零退出 |
+| `run` / `summary` | 使用缓存复算 / 输出每日中文短结论 |
+| `refresh-macro` / `research` / `evaluate` | 更新四组宏观解释因子 / 生成策略研究 / 评估已到期观察 |
+| `valuation-import FILE` / `ledger-import FILE` | 导入确认估值 / 导入确认流水 |
+| `account NAME` | 查看按账户和币种重放的现金、股数、已知成本与已实现损益 |
+| `verify` / `audit` | 独立复算 / 检查数据库、关系和证据哈希 |
+| `freeze` | 固定源码与数据截止日，开始积累该版本的前瞻证据 |
+| `backup --output FILE.zip` | 创建一致性数据库快照、研究证据与逐文件清单 |
+| `restore FILE.zip --to EMPTY_DIRECTORY` | 核验后恢复到空目录 |
+| `doctor` / `serve` | 检查运行环境 / 打开本机只读看板 |
+| `export --output FILE.json` | 导出当前报告，导出文件包含私人数据 |
 
-所有命令可在子命令前加 `--json`；`--home`统一指定私有运行目录。所有写操作共用操作系统锁，崩溃后锁自动释放。连续观察只计成功完成、行情合格的不同交易日，演示与离线复算不计数。
+## 验证与研究边界
 
-## 系统包含什么
+当前 v6.0.1 有 **240 项测试通过，1 项可选发行商 NAV 数据测试因资料未分发而跳过**。GitHub CI 覆盖 Python 3.11、3.12、3.13，以及同一持久卷上的只读容器运行、独立复算和审计。
 
-- **行情**：QQQ/TQQQ原始与复权收盘，保留供应商原文和哈希；拦截错误代码、非日线、数组错位、重复日期、无效价格、未完整收盘与来源冲突。两个Yahoo端点仍算同一供应商。
-- **账户**：追加式真实流水、VOID纠正、独立估值、人民币旧基线迁移。十进制金额计算；多币种分别记账，不用未知汇率强行相加。
-- **配置判断**：200日趋势缓冲，20日波动门槛，确认持仓驱动的分步增加；重复日报不等于成交。
-- **研究**：固定60/40、QQQ基准、风险平价、波动目标、统计均值回归、12个月动量；宏观四因子敏感度、明确事件的概率、联合区块路径推演和费用比较。
-- **验证**：独立的解析费用求解器重放全部回测净值；两资产风险平价解析对照；历史前缀检验；完整来源和模型快照。
-- **运行**：可安装Python包、只读本地看板、SQLite备份恢复、运行状态、通知去重记录、systemd定时器、容器配置、GitHub CI。
+重构前后在冻结的同一行情上，十条策略 × 两档费用的汇总结果完全一致；20 组净值路径独立复算最大相对偏差约 `3.3e-14`。[验证记录](docs/VALIDATION.md)列出方法、证据与待观察项。
 
-## 如何理解结果
+研究使用美元 ETF 复权市场价，收盘 t 产生信号，t+1 收盘执行，新增持仓从 t+2 开始获得收益；比较每边 15 / 50 基点费用，未计税费与现金利息。真实人民币账户收益需要完整份额、现金流和同日汇率。
 
-程序测试通过说明代码在这些用例下按预期运行。独立回算一致说明这些计算互相吻合。连续运行成功说明运行链路在观察期内稳定。**三者都不等于策略能赚钱或能跑赢60/40持有。**
+现有事件概率模型尚未胜过历史频率基准。长期稳定性与策略效果继续积累未来证据；测试通过、回算一致和短期运行成功各有适用范围，均不代表投资收益得到保证。具体公式见[研究说明](docs/FORMULAS.md)。
 
-历史研究使用真实ETF复权市场价做代理，收盘t产生信号，t+1收盘执行，新增持仓从t+2开始获得收益。费用按每边15/50基点比较；现金利息和税费未建模。真实人民币账户收益需完整份额、现金流和同日汇率，旧聚合估值不足时不计算。
+## 文档
 
-[公式与研究边界](docs/FORMULAS.md) · [架构与源码借鉴](docs/ARCHITECTURE.md) · [日常运行与恢复](docs/OPERATIONS.md) · [验收记录](docs/VALIDATION.md) · [开源来源](docs/UPSTREAM_REVIEW.md)
+| 想了解什么 | 阅读入口 |
+| --- | --- |
+| 英文使用说明 | [English README](README.en.md) |
+| 设计与模块边界 | [架构](docs/ARCHITECTURE.md) |
+| 公式、执行时序与模型限制 | [研究说明](docs/FORMULAS.md) |
+| 每日运行、迁移、容器与恢复 | [操作手册](docs/OPERATIONS.md) |
+| 实测结果与当前缺口 | [验证记录](docs/VALIDATION.md) |
+| 借鉴了哪些成熟项目、保留了什么取舍 | [上游源码审阅](docs/UPSTREAM_REVIEW.md) |
+| 报告问题、修改代码或改进文档 | [贡献指南](CONTRIBUTING.md) · [Issues](https://github.com/wanghaibing07/investlab-monitor/issues) |
 
-## 验证开发修改
+详细技术文档目前以中文为主；英文首页包含安装、账户接入、命令、迁移、恢复和验证说明。
 
-```bash
-PYTHONPATH=src/investlab/engine python -m unittest discover -s tests/legacy -q
-python -m unittest discover -s tests/app -q
-python scripts/check_release.py
-```
+## 参与贡献
 
-发布代码不包含用户账户、真实行情缓存、运行日志、联系方式、凭据或私有备份。GitHub是工作源码唯一来源；私有状态包通过SOURCE.json引用精确提交。示例全部虚构。原v5测试中的可选发行商NAV数据没有随代码再分发，相关用例在缺少该资料时明确跳过。
+欢迎提交可复现的问题、文档改进和有证据支持的修复。提交前请先阅读[贡献指南](CONTRIBUTING.md)，使用独立演示目录验证，移除账户数据、缓存、日志和凭据。模型变更请同时提供数据时间边界、费用假设与前后结果。
 
 ## 来源与许可
 
-本项目在现有个人v5.5引擎上渐进重构。定向阅读了OpenBB、Qlib、LEAN、Ghostfolio、Wealthfolio、skfolio和QQQ/TQQQ Decision Cockpit的源码，借鉴接口和验证设计，未复制或捆绑这些上游的实现代码。逐项路径、提交和取舍见[源码审阅记录](docs/UPSTREAM_REVIEW.md)。项目代码使用MIT许可；第三方数据的使用和再分发规则独立于代码许可。
+InvestLab 在原有 v5.5 数值引擎上渐进重构。定向阅读了 OpenBB、Qlib、LEAN、Ghostfolio、Wealthfolio、skfolio 和 QQQ/TQQQ Decision Cockpit，借鉴接口和验证设计，未复制或捆绑这些上游实现。路径、固定提交与取舍见[源码审阅记录](docs/UPSTREAM_REVIEW.md)。
+
+代码使用 [MIT 许可证](LICENSE)。第三方市场数据的获取与再分发规则独立于代码许可。GitHub 保存工作源码；个人账本与运行证据保存在独立私有目录，状态包通过 `SOURCE.json` 引用精确源码提交。
