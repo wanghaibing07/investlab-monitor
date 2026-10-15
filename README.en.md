@@ -6,6 +6,8 @@
 
 InvestLab is an open-source investment monitor you can run on your own computer. It helps you answer four practical questions: **What do I hold? What changed today? Why might I adjust my allocation? How did different strategies perform in the past?** You get a clear record of the numbers and reasons; you make the final trading decisions.
 
+**[Live demo (synthetic data)](https://investlab-monitor.vercel.app/)**: No installation required. This is a read-only demonstration snapshot, not live market data or a hosted personal account. Run locally for full functionality.
+
 [![CI](https://github.com/wanghaibing07/investlab-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/wanghaibing07/investlab-monitor/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)

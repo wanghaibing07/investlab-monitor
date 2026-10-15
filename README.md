@@ -6,6 +6,8 @@
 
 InvestLab 是一个开源、可在自己电脑上运行的投资监控工具。它帮你看清**现在持有什么、今天需要关注什么、为什么考虑调整仓位，以及不同投资方法过去表现如何**。系统提供计算和判断依据，买卖由你自己决定。
 
+**[在线体验（虚构数据）](https://investlab-monitor.vercel.app/)**：无需安装。在线版是只读的演示快照，不接入实时行情或真实账户；完整功能请在本机运行。
+
 [![CI](https://github.com/wanghaibing07/investlab-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/wanghaibing07/investlab-monitor/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)

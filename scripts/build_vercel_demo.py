@@ -80,6 +80,12 @@ def export() -> None:
         raw_html = page.read_text(encoding="utf-8")
         if "<main>" not in raw_html:
             raise RuntimeError("Demo banner insertion point changed")
+        footer_old = "数据在本机保存 · 无自动下单"
+        if footer_old not in raw_html:
+            raise RuntimeError("Public demo footer changed")
+        raw_html = raw_html.replace(
+            footer_old, "数据为部署时的虚构快照 · 无自动下单", 1
+        )
         page.write_text(raw_html.replace(
             "<main>",
             '<main><div class="demo-banner" role="note">'
