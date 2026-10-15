@@ -143,6 +143,26 @@ class DailyOperationsTests(unittest.TestCase):
         self.assertFalse(list(daily.outbox(home).glob("*.json")))
         run.assert_not_called()
 
+    def test_unexpected_worker_error_is_a_failure_not_false_success(self):
+        with (patch("investlab.daily.service.worker", return_value={}),
+              patch("investlab.daily.service.run", return_value={
+                  "review_id": "verified-report", "qualified_online": True}),
+              patch("investlab.daily.service.audit", side_effect=KeyError("PRIVATE_INTERNAL_FIELD"))):
+            result = daily.run_cycle(self.home)
+        self.assertEqual(result["status"], "FAILED")
+        self.assertEqual(result["issue_code"], "AUDIT_FAILED")
+        self.assertEqual(result["error_type"], "KeyError")
+        self.assertNotIn("PRIVATE_INTERNAL_FIELD", json.dumps(result))
+
+    def test_stale_in_progress_status_identified_as_interrupted(self):
+        from datetime import datetime, timedelta, timezone
+        from investlab.core import atomic
+        old = (datetime.now(timezone.utc)-timedelta(hours=2)).isoformat()
+        atomic(daily.status_file(self.home), {"status": "RUNNING", "started_at": old})
+        status = daily.current_status(self.home)
+        self.assertEqual(status["status"], "INTERRUPTED")
+        self.assertEqual(status["issue_code"], "PREVIOUS_CYCLE_STILL_RUNNING_AFTER_TIMEOUT")
+
     def test_unconfigured_status_is_explicit(self):
         self.assertEqual(daily.current_status(self.home)["status"], "NOT_RUN")
 
