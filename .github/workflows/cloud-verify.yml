@@ -5,12 +5,14 @@ on:
       - 'deploy/cloud/**'
       - 'src/investlab/cloud.py'
       - 'tests/app/test_cloud_runtime.py'
+      - 'tests/cloud/**'
       - '.github/workflows/cloud-verify.yml'
   pull_request:
     paths:
       - 'deploy/cloud/**'
       - 'src/investlab/cloud.py'
       - 'tests/app/test_cloud_runtime.py'
+      - 'tests/cloud/**'
       - '.github/workflows/cloud-verify.yml'
 permissions:
   contents: read
