@@ -1,0 +1,16 @@
+# Public example deployment; serves synthetic data only.
+services:
+  - type: web
+    name: investlab-demo
+    runtime: python
+    plan: free
+    buildCommand: pip install .
+    startCommand: sh deploy/render-start.sh
+    healthCheckPath: /health/live
+    envVars:
+      - key: INVESTLAB_HOME
+        value: /tmp/investlab-demo
+      - key: PYTHONDONTWRITEBYTECODE
+        value: "1"
+      - key: PYTHONUNBUFFERED
+        value: "1"
