@@ -1,6 +1,6 @@
 """Never make real HTTP requests or Blob calls; test cloud HTTP authorization boundaries."""
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 import importlib.util
 import os
 import unittest
@@ -44,6 +44,60 @@ class CloudWebSecurityTests(unittest.TestCase):
                 headers={"origin":"https://testserver","x-investlab-admin-token":"wrong"}
                 self.assertEqual(self.client.post("/api/initialize",json=body,headers=headers).status_code,401)
                 invoked.assert_not_called()
+
+    def test_no_report_verifies_actual_account_absent(self):
+        with (patch.dict(os.environ, {"BLOB_READ_WRITE_TOKEN": "test-token"}),
+              patch("investlab.cloud.private_account_verified",
+                    new=AsyncMock(return_value=False)) as verify,
+              patch("investlab.cloud.latest_json",
+                    new=AsyncMock(return_value=None)) as latest):
+            response = self.client.get("/api/status")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "SETUP_REQUIRED")
+        self.assertFalse(data["account_initialized"])
+        self.assertTrue(data["storage_verified"])
+        self.assertFalse(data["latest_run_exists"])
+        verify.assert_awaited_once()
+        latest.assert_awaited_once_with("runs")
+
+    def test_account_exists_without_report_is_ready_for_first_run(self):
+        with (patch.dict(os.environ, {"BLOB_READ_WRITE_TOKEN": "test-token"}),
+              patch("investlab.cloud.private_account_verified",
+                    new=AsyncMock(return_value=True)),
+              patch("investlab.cloud.latest_json",
+                    new=AsyncMock(return_value=None))):
+            response = self.client.get("/api/status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "READY_FOR_FIRST_RUN")
+        self.assertTrue(response.json()["account_initialized"])
+        self.assertFalse(response.json()["latest_run_exists"])
+
+    def test_stale_report_without_account_is_not_reported_as_success(self):
+        with (patch.dict(os.environ, {"BLOB_READ_WRITE_TOKEN": "test-token"}),
+              patch("investlab.cloud.private_account_verified",
+                    new=AsyncMock(return_value=False)),
+              patch("investlab.cloud.latest_json",
+                    new=AsyncMock(return_value={"status": "SUCCEEDED"}))):
+            response = self.client.get("/api/status")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["status"], "STATE_INCONSISTENT")
+        self.assertEqual(response.json()["issue_code"],
+                         "RUN_REPORT_WITHOUT_CONFIRMED_ACCOUNT")
+
+    def test_actual_storage_error_does_not_claim_account_missing(self):
+        with (patch.dict(os.environ, {"BLOB_READ_WRITE_TOKEN": "test-token"}),
+              patch("investlab.cloud.private_account_verified",
+                    new=AsyncMock(side_effect=RuntimeError("do not expose token"))),
+              patch("investlab.cloud.latest_json",
+                    new=AsyncMock()) as latest):
+            response = self.client.get("/api/status")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["status"], "STORAGE_ERROR")
+        self.assertIsNone(response.json()["account_initialized"])
+        self.assertFalse(response.json()["storage_verified"])
+        self.assertNotIn("token", response.text)
+        latest.assert_not_awaited()
 
     def test_docs_disabled_and_cloud_is_vaulted(self):
         self.assertEqual(self.client.get("/docs").status_code,404)
