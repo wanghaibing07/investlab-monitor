@@ -25,7 +25,7 @@ docker compose -f deploy/compose.yaml run --rm monitor init --demo
 docker compose -f deploy/compose.yaml run --rm monitor run
 ```
 
-容器模板运行CLI，数据使用持久卷。只读看板默认监听127.0.0.1；当前模板不把容器看板公开暴露，不假装端口映射后就能访问。优先在主机运行`serve`，通过SSH本地端口转发访问。镜像基础标签应在自己的部署流水线中解析并固定digest；本次未在没有Docker运行时的环境里冒充构建成功。
+容器模板运行CLI，数据使用持久卷。只读看板默认监听127.0.0.1；当前模板不把容器看板公开暴露，不假装端口映射后就能访问。优先在主机运行`serve`，通过SSH本地端口转发访问。CI将实际构建镜像并用同一持久卷跨容器运行演示、独立复核与审计；本地环境无Docker，实际成功结果以远端container job为准。
 
 ## 备份与恢复演练
 
@@ -56,3 +56,13 @@ investlab --home /private/restore-check doctor
 | 宏观模型DATA_LIMITED | 四个CSV的日期与缺失，ETF模型可继续 |
 | 两个Yahoo地址都成功 | 仍是同一供应商，不升级为独立验证 |
 | 图表收益与账户不同 | 前者美元假设回测，后者真实现金流；不能直接混合 |
+
+## 私有状态包与公开源码
+
+GitHub保存工作源码；私有主文件保存运行账本和证据，SOURCE.json固定仓库URL与完整提交。每轮先校验状态包manifest，再从该提交取回源码并安装，不能用浮动main悄悄替换已冻结版本。保存后续状态使用：
+
+```bash
+python investlab/scripts/package_private.py --home ./runtime --output NEW_PRIVATE.zip --repository https://github.com/wanghaibing07/investlab-monitor --revision FULL_VERIFIED_COMMIT_SHA
+```
+
+个人状态包不上传GitHub；研究快照中的历史源码是证据，不是另一份工作树。

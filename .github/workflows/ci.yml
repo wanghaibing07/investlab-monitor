@@ -24,3 +24,16 @@ jobs:
       - run: investlab --home /tmp/investlab-demo verify
       - run: investlab --home /tmp/investlab-demo audit
       - run: python -m pip wheel --no-deps . -w /tmp/wheels
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build container
+        run: docker build -f deploy/Dockerfile -t investlab-ci .
+      - name: Exercise durable demo state across containers
+        run: |
+          docker volume create investlab-ci-data
+          docker run --rm --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges -v investlab-ci-data:/var/lib/investlab investlab-ci init --demo
+          docker run --rm --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges -v investlab-ci-data:/var/lib/investlab investlab-ci run
+          docker run --rm --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges -v investlab-ci-data:/var/lib/investlab investlab-ci verify
+          docker run --rm --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges -v investlab-ci-data:/var/lib/investlab investlab-ci audit

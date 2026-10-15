@@ -79,3 +79,14 @@ class HardeningReviewTests(unittest.TestCase):
         subprocess.run(['git','add','-f','.env'],cwd=project,check=True)
         p=subprocess.run([__import__('sys').executable,'scripts/check_release.py'],cwd=project,text=True,capture_output=True)
         self.assertEqual(p.returncode,1);self.assertIn('environment secrets: .env',p.stdout)
+
+    def test_private_package_references_git_without_copying_working_source(self):
+        import subprocess,sys
+        script=Path(__file__).resolve().parents[2]/'scripts/package_private.py'
+        out=Path(self.tmp.name)/'private-state.zip'
+        revision='4d0660cda37c42e48f83f24feb7e586a940dda15'
+        subprocess.run([sys.executable,str(script),'--home',str(self.home),'--output',str(out),'--repository','https://github.com/wanghaibing07/investlab-monitor','--revision',revision],check=True,capture_output=True)
+        with zipfile.ZipFile(out) as z:
+            self.assertEqual(json.loads(z.read('SOURCE.json'))['revision'],revision)
+            self.assertIn('runtime/data/monitor.sqlite3',z.namelist())
+            self.assertFalse(any(n.startswith('investlab/') for n in z.namelist()))
