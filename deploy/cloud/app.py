@@ -56,7 +56,8 @@ def _private_origin(request: Request):
 @app.get("/health")
 async def health():
     return {"service": "InvestLab private cloud", "status": "UP",
-            "storage_connected": _configured(), "execution_enabled": False,
+            "storage_connected": _configured(), "storage_credentials_only": True,
+            "execution_enabled": False,
             "browser_auth": "VERCEL_AUTH_REQUIRED_AT_PLATFORM"}
 
 
@@ -81,13 +82,53 @@ a{color:#8ed2ed}h1{font-size:30px}small{color:#98afc4}</style></head><body>
 @app.get("/api/status")
 async def status():
     if not _configured():
-        return JSONResponse({"status": "STORAGE_UNAVAILABLE", "account_initialized": False},status_code=503)
+        return JSONResponse({
+            "status": "STORAGE_UNAVAILABLE",
+            "account_initialized": None,
+            "storage_verified": False,
+            "latest_run_exists": None,
+        }, status_code=503)
     try:
+        # A missing run is not evidence that the account is uninitialized.
+        # Verify private Blob contents, ZIP checksums and SQLite confirmed valuation.
+        account_initialized = await cloud.private_account_verified()
         report = await cloud.latest_json("runs")
-        return report or {"status":"SETUP_REQUIRED", "account_initialized":False,
-                          "meaning":"No private daily run has completed; confirm your account first"}
+        if report is None:
+            return {
+                "status": "READY_FOR_FIRST_RUN" if account_initialized else "SETUP_REQUIRED",
+                "account_initialized": account_initialized,
+                "storage_verified": True,
+                "latest_run_exists": False,
+                "execution_enabled": False,
+                "meaning": (
+                    "Confirmed private account found; first verified online run pending"
+                    if account_initialized else
+                    "Private Blob was read successfully; no confirmed account or daily report exists"
+                ),
+            }
+        if not account_initialized:
+            return JSONResponse({
+                "status": "STATE_INCONSISTENT",
+                "account_initialized": False,
+                "latest_run_exists": True,
+                "storage_verified": True,
+                "issue_code": "RUN_REPORT_WITHOUT_CONFIRMED_ACCOUNT",
+                "execution_enabled": False,
+            }, status_code=503)
+        return {
+            **report,
+            "account_initialized": True,
+            "storage_verified": True,
+            "latest_run_exists": True,
+            "execution_enabled": False,
+        }
     except Exception as exc:
-        return JSONResponse({"status":"STORAGE_ERROR", "error_type":type(exc).__name__},status_code=503)
+        return JSONResponse({
+            "status": "STORAGE_ERROR",
+            "account_initialized": None,
+            "storage_verified": False,
+            "error_type": type(exc).__name__,
+        }, status_code=503)
 
 
 @app.get("/api/latest")
