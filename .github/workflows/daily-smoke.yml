@@ -12,7 +12,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install .
-      - run: python -m unittest tests.app.test_daily_operations -v
+      - run: python -m unittest discover -s tests/app -p test_daily_operations.py -v
       - name: Check systemd has monitored wrapper
         run: |
           grep -q 'run-daily.sh' deploy/investlab.service
