@@ -28,7 +28,7 @@ def parser():
     sub.add_parser("refresh-macro", help="更新四组宏观解释变量")
     b = sub.add_parser("backup"); b.add_argument("--output")
     r = sub.add_parser("restore"); r.add_argument("archive"); r.add_argument("--to", required=True)
-    serve = sub.add_parser("serve"); serve.add_argument("--port", type=int, default=8765)
+    serve = sub.add_parser("serve"); serve.add_argument("--port", type=int, default=8765); serve.add_argument("--public-demo", action="store_true", help="仅允许使用虚构账户的公开只读展示")
     ev = sub.add_parser("ledger-import"); ev.add_argument("file")
     ac = sub.add_parser("account"); ac.add_argument("name", default="default", nargs="?")
     val = sub.add_parser("valuation-import"); val.add_argument("file")
@@ -43,7 +43,7 @@ def main(argv=None):
         if cmd == "serve":
             service.settings(home)
             from .server import serve
-            serve(home, args.port); return 0
+            serve(home, args.port, public_demo=args.public_demo); return 0
         if cmd == "account": result = ledger.account(home, args.name)
         elif cmd == "summary":
             v = service.latest(home)
