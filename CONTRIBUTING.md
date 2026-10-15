@@ -28,13 +28,13 @@ python scripts/check_release.py
 
 Windows PowerShell 使用 `.\.venv\Scripts\Activate.ps1` 激活环境；旧引擎测试前先设置 `$env:PYTHONPATH = 'src/investlab/engine'`，然后运行 `python -m unittest discover -s tests/legacy -q`。
 
-验证运行行为时使用独立演示目录，按 [README](README.md#快速体验) 执行 `init --demo`、`run`、`verify` 和 `audit`。不要对真实账本执行演示初始化。容器和 Python 版本兼容性由 GitHub CI 继续检查。
+验证运行行为时使用独立演示目录，按 [README](README.md#快速体验) 执行 `init --demo`、`run`、`verify` 和 `audit`。演示数据与真实账户使用不同目录。容器和 Python 版本兼容性由 GitHub CI 继续检查。
 
 提交说明写清具体问题、修改后的行为与验证结果。故障修复应提供能够暴露该问题的用例；文案修订检查双语一致性和链接即可。模型或公式变更需要说明信号与成交时间、费用、输入截止日以及同数据前后对照，更新相应文档与版本证据。
 
 ### 双语文档
 
-`README.md` 为中文首页，`README.en.md` 为英文首页。两页最前面的语言入口互相链接。修改功能、安装步骤或验证结论时同步更新两页；英文使用说明不代表命令行和看板已经英文化。详细技术文档可以逐步翻译，现有中文链接须清楚标注。
+`README.md` 为中文首页，`README.en.md` 为英文首页。两页最前面的语言入口互相链接。修改功能、安装步骤或验证结论时同步更新两页；命令行和看板目前以中文为主。详细技术文档可以逐步翻译，现有中文链接须清楚标注。
 
 ## English
 
@@ -50,10 +50,10 @@ Remove real accounts, trades, contact information, tokens, full runtime archives
 
 Use the installation and test commands in the Chinese section above. On Windows PowerShell, activate with `.\.venv\Scripts\Activate.ps1`; before the legacy suite, set `$env:PYTHONPATH = 'src/investlab/engine'` and run `python -m unittest discover -s tests/legacy -q`.
 
-For runtime changes, use a separate demo directory and follow the [English quick start](README.en.md#quick-start): `init --demo`, `run`, `verify`, and `audit`. Do not initialize demo data against a real account. GitHub CI also checks the Python matrix and containers.
+For runtime changes, use a separate demo directory and follow the [English quick start](README.en.md#quick-start): `init --demo`, `run`, `verify`, and `audit`. Keep demo data and real accounts in separate directories. GitHub CI also checks the Python matrix and containers.
 
 Describe the concrete problem, resulting behavior, and validation in your pull request. Add a regression case that exposes a corrected failure. For text-only changes, check translation consistency and links. Model or formula changes should document signal/execution timing, fees, the input cutoff, and before/after comparisons on identical data; update the corresponding methodology and version evidence.
 
 ### Bilingual documentation
 
-`README.md` is the Chinese entry and `README.en.md` is the English entry. Keep their first-line language links reciprocal. Update both when capabilities, installation steps, or validation claims change. English documentation does not imply an English CLI or dashboard. Detailed technical documents can be translated incrementally; identify links to the existing Chinese material clearly.
+`README.md` is the Chinese entry and `README.en.md` is the English entry. Keep their first-line language links reciprocal. Update both when capabilities, installation steps, or validation claims change. The CLI and dashboard are currently primarily in Chinese. Detailed technical documents can be translated incrementally; identify links to the existing Chinese material clearly.
