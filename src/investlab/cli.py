@@ -34,6 +34,7 @@ def parser():
     val = sub.add_parser("valuation-import"); val.add_argument("file")
     export = sub.add_parser("export"); export.add_argument("--output", required=True)
     sub.add_parser("alpaca-paper-snapshot", help="只读保存Alpaca模拟账户风险快照（USD）")
+    sub.add_parser("alpaca-quote-check", help="用Alpaca IEX收盘样本核对本机最近完整行情（独立背景证据，不改信号）")
     sub.add_parser("summary")
     return p
 
@@ -62,6 +63,13 @@ def main(argv=None):
                 "other_symbols": record["other_symbols"],
                 "execution_enabled": False
             }
+        elif cmd == "alpaca-quote-check":
+            from .integrations.alpaca_market import check
+            with lock(home):
+                report = check(home)
+                path = home / "data" / "alpaca-quote-check.json"
+                atomic(path, report)
+            result = {**report, "saved": str(path)}
         elif cmd == "account": result = ledger.account(home, args.name)
         elif cmd == "summary":
             v = service.latest(home)
