@@ -27,52 +27,45 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
-def _client():
-    from vercel.blob import AsyncBlobClient
-    return AsyncBlobClient()
-
-
 async def _list(prefix):
-    from vercel.blob import list_objects
-    def query():
-        all_objects = []
-        cursor = None
-        for _ in range(40):
-            kwargs = {"prefix": prefix, "limit": 1000}
-            if cursor:
-                kwargs["cursor"] = cursor
-            page = list_objects(**kwargs)
-            all_objects.extend(page.blobs)
-            if not page.has_more:
-                return all_objects
-            if not page.cursor or page.cursor == cursor:
-                raise RuntimeError("Blob list pagination made no progress")
-            cursor = page.cursor
-        raise RuntimeError("Blob list exceeds supported page count")
-    return await asyncio.to_thread(query)
+    """Use the supported async Vercel Blob 0.12.x iterator API."""
+    from vercel.blob import query_blobs
+
+    objects = []
+    async for item in query_blobs(prefix=prefix, page_size=1000):
+        if len(objects) >= 40000:
+            raise RuntimeError("Private Blob list exceeds maximum supported items")
+        objects.append(item)
+    return objects
 
 
 async def _read(pathname, *, max_size=MAX_ARCHIVE_BYTES):
-    result = await _client().get(pathname, access="private")
-    if result is None:
-        return None
-    if result.status_code != 200:
-        raise RuntimeError("Blob read returned an unexpected status")
+    """Stream private Blob content with a strict application size limit."""
+    from vercel.blob import stream_blob
+
     data = bytearray()
-    async for chunk in result.stream:
-        data.extend(chunk)
-        if len(data) > max_size:
+    async with stream_blob(pathname, access="private") as download:
+        if download.metadata.status_code != 200:
+            raise RuntimeError("Private Blob read returned an unexpected status")
+        if download.metadata.size is not None and download.metadata.size > max_size:
             raise ValueError("Private Blob exceeds maximum allowed size")
+        async for chunk in download:
+            data.extend(chunk)
+            if len(data) > max_size:
+                raise ValueError("Private Blob exceeds maximum allowed size")
     return bytes(data)
 
 
 async def _write(prefix, content, suffix="json"):
-    # Each persisted version has its own immutable key; overwrites are forbidden.
+    """Write a unique immutable private Blob object; never overwrite data."""
+    from vercel.blob import put_blob
+
     name = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     path = f"{prefix}/{name}-{uuid.uuid4().hex}.{suffix}"
-    result = await _client().put(
-        path, content, access="private", add_random_suffix=False, overwrite=False,
-        content_type="application/zip" if suffix=="zip" else "application/json",
+    result = await put_blob(
+        path, content, access="private", add_random_suffix=False,
+        allow_overwrite=False,
+        content_type="application/zip" if suffix == "zip" else "application/json",
     )
     return result.pathname
 
