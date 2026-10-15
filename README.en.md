@@ -30,7 +30,7 @@ investlab --home ./runtime/demo run
 investlab --home ./runtime/demo serve
 ```
 
-Open **http://127.0.0.1:8765** for the daily review, allocation gap, strategy equity comparisons, account journal, and run history. Demo data is labeled as fictional. Press `Ctrl+C` to stop the server. Git ignores `runtime/`.
+Open [http://127.0.0.1:8765](http://127.0.0.1:8765) for the daily review, allocation gap, strategy equity comparisons, account journal, and run history. Demo data is labeled as fictional. Press `Ctrl+C` to stop the server. Git ignores `runtime/`.
 
 On Windows PowerShell, replace the activation command with `.\.venv\Scripts\Activate.ps1`; the remaining commands are unchanged. You can also invoke `.\.venv\Scripts\investlab.exe` directly. **The CLI and dashboard are currently primarily in Chinese.** This README provides the English project and usage guide.
 

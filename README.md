@@ -30,7 +30,7 @@ investlab --home ./runtime/demo run
 investlab --home ./runtime/demo serve
 ```
 
-打开 **http://127.0.0.1:8765**，查看今日判断、账户到目标的差距、策略净值比较、流水和运行记录。演示页面会标明虚构数据；按 `Ctrl+C` 停止服务。`runtime/` 已由 Git 忽略。
+打开 [http://127.0.0.1:8765](http://127.0.0.1:8765)，查看今日判断、账户到目标的差距、策略净值比较、流水和运行记录。演示页面会标明虚构数据；按 `Ctrl+C` 停止服务。`runtime/` 已由 Git 忽略。
 
 Windows PowerShell 将激活命令替换为 `.\.venv\Scripts\Activate.ps1`，其余命令相同；也可以直接调用 `.\.venv\Scripts\investlab.exe`。当前命令行和看板以中文为主，英文首页提供项目与使用说明。
 
