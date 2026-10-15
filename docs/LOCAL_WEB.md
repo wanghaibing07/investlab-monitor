@@ -34,3 +34,7 @@ investlab --home ~/.local/share/investlab serve --local-edit
 - 改变估值后，必须点击重新计算才会更新策略判断。联网失败时旧报告不会被伪装成当日成功。
 - 回测不验证未来收益；在研究页查看仓位敞口与模拟风险。
 - 本地目录应限制其他系统用户读写；备份与数据库均可能包含个人账户信息。
+
+## 额外的真实行情背景核对
+
+若本地已有真实行情且配置了 Alpaca Paper Trading 凭据，可运行 `investlab --home ~/.local/share/investlab alpaca-quote-check` 查看最新本地交易日与 Alpaca IEX 日线的差异。它不改变原行情、报告或交易信号；`CONTEXT_AGREEMENT` 只是背景佐证，不是全市场独立结算价证明。细节见 [Alpaca 模拟账户文档](ALPACA_PAPER.md)。
