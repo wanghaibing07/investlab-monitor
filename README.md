@@ -116,6 +116,12 @@ investlab --home ~/.local/share/investlab summary
 
 历史回测用于比较方法，不等于未来收益承诺。回测计入两档模拟交易费用，未计税费与现金利息；真实账户结果还取决于交易、资金流和汇率。完整假设见[研究方法](docs/FORMULAS.md)。
 
+## 私有 Vercel 云端运行（独立部署）
+
+云端版 `investlab-cloud` 在 Vercel Authentication 后访问；使用私有 Blob 保存版本化的账户与计算快照，绝不与 [公开虚构演示](https://investlab-monitor.vercel.app/) 共享真实账户数据。新建项目默认**不自动初始化用户账户，也不启用 Cron**，先完成本人确认的账户初始化和线上验证；避免尚未配置的任务被误报为运行成功。
+
+[私有云端架构、配置和验收说明](docs/VERCEL_CLOUD.md)。
+
 ## 每日自动运行与失败告警
 
 在自己的私有 Linux 主机上，可运行 `daily-cycle` 完成在线行情、持久化、独立复核、成熟结果评价与状态记录：
