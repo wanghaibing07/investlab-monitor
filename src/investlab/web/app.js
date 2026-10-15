@@ -31,7 +31,25 @@ function chart(curves){const svg=$('curve'),legend=$('chart-labels');svg.replace
 function node(tag,attrs,label){const e=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);if(label)e.textContent=label;svg.append(e);return e;}
 for(let i=0;i<5;i++){const value=max*i/4,y=top+height-height*i/4;node('line',{x1:left,y1:y,x2:left+width,y2:y,stroke:'#273548'});node('text',{x:0,y:y+4},value.toFixed(1));}
 Object.entries(curves).forEach(([name,series],j)=>{const points=series.equity.map((v,i)=>`${left+width*i/Math.max(1,series.equity.length-1)},${top+height-(v-min)/(max-min||1)*height}`).join(' ');node('polyline',{points,fill:'none',stroke:palette[j%palette.length],'stroke-width':2});const label=element('span'),dot=element('i');dot.style.background=palette[j%palette.length];label.append(dot,document.createTextNode(names[name]||name));legend.append(label);});const dates=all[0].dates;node('text',{x:left,y:290},dates[0]);node('text',{x:left+width-85,y:290},dates.at(-1));}
-async function load(){try{$('error').hidden=true;const [v,research,history,journal]=await Promise.all(['/api/latest','/api/research','/api/history','/api/journal'].map(get));render(v);table('models',(research.comparisons||[]).map(r=>[names[r.model_id]||r.model_id,r.cost_bps+' bp',r.summary.cagr_pct.toFixed(2)+'%',r.summary.max_drawdown_pct.toFixed(2)+'%',r.summary.annual_vol_pct.toFixed(2)+'%',r.max_relative_equity_error.toExponential(1)]));chart(research.curves||{});text('research-status',research.status==='PASS'?`独立复算通过：${research.comparisons.length}组比较，行情截至${research.data_end}。历史已用于开发，分段结果不冒充未见样本。`:'尚未完成独立复核。运行 investlab verify 后刷新。');table('operations',history.map(r=>[new Date(r.started_at).toLocaleString('zh-CN'),r.command,r.status,r.completed_at?new Date(r.completed_at).toLocaleString('zh-CN'):'未完成']));table('journal',journal.map(r=>[r.occurred_at,r.account,r.kind,r.symbol||'—',r.quantity||r.amount]));}catch(e){text('error',e.message);$('error').hidden=false;}}
+async function loadDailyHealth(){
+  const panel=$('daily-health');
+  if(!panel)return;
+  try{
+    const r=await fetch('/api/daily-status',{cache:'no-store'});
+    if(!r.ok){panel.hidden=true;return;}
+    const v=await r.json();
+    if(v.status==='NOT_RUN'){panel.hidden=true;return;}
+    panel.hidden=false;
+    const names={SUCCEEDED:'已完成',FAILED:'执行失败',DEGRADED:'部分环节失败',RUNNING:'运行中'};
+    text('daily-health-state',names[v.status]||v.status);
+    const box=$('daily-health-details');box.replaceChildren();
+    row(box,'阶段',v.stage||'—',v.status!=='SUCCEEDED');
+    row(box,'最后更新',v.completed_at?new Date(v.completed_at).toLocaleString('zh-CN'):'尚未结束');
+    row(box,'在线数据验证',v.qualified_online?'通过':'未通过',!v.qualified_online);
+    if(v.issue_code)row(box,'问题代码',v.issue_code,true);
+  }catch{panel.hidden=true;}
+}
+async function load(){loadDailyHealth();try{$('error').hidden=true;const [v,research,history,journal]=await Promise.all(['/api/latest','/api/research','/api/history','/api/journal'].map(get));render(v);table('models',(research.comparisons||[]).map(r=>[names[r.model_id]||r.model_id,r.cost_bps+' bp',r.summary.cagr_pct.toFixed(2)+'%',r.summary.max_drawdown_pct.toFixed(2)+'%',r.summary.annual_vol_pct.toFixed(2)+'%',r.max_relative_equity_error.toExponential(1)]));chart(research.curves||{});text('research-status',research.status==='PASS'?`独立复算通过：${research.comparisons.length}组比较，行情截至${research.data_end}。历史已用于开发，分段结果不冒充未见样本。`:'尚未完成独立复核。运行 investlab verify 后刷新。');table('operations',history.map(r=>[new Date(r.started_at).toLocaleString('zh-CN'),r.command,r.status,r.completed_at?new Date(r.completed_at).toLocaleString('zh-CN'):'未完成']));table('journal',journal.map(r=>[r.occurred_at,r.account,r.kind,r.symbol||'—',r.quantity||r.amount]));}catch(e){text('error',e.message);$('error').hidden=false;}}
 function renderScenario(){
   const shock=Number($('scenario-index').value),tqqq=Number($('scenario-tqqq').value)/100;
   const qqq=1-tqqq, exposure=qqq+3*tqqq, impact=exposure*shock;
