@@ -56,7 +56,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch --orphan vercel-site
-          git rm -rf -q .
+          git rm -rf -q . || true
           git clean -fdx -q
           cp -R "$RUNNER_TEMP/investlab-vercel-site/." .
           git add -A
