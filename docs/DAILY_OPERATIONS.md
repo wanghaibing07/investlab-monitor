@@ -62,3 +62,5 @@ systemctl status investlab.timer
 - 这是运行和报警机制，不是新的收益预测模型；前瞻评估只能在真实未来数据到期后积累样本。
 - 本地长期监控依赖机器保持运行、网络稳定、行情供应商与 SMTP 可用；本项目不代替券商账户事实。
 - 如需要外网访问真实账户，应单独设计身份验证、加密与权限控制；不能把 `--local-edit` 通过端口映射直接公开。
+
+调度的 `TimeoutStartSec` 默认设置为1800秒，因为宏观数据、行情下载、研究复算与前瞻评价可能需要串行执行。若发生超时，`daily-status` 可能显示运行中；应结合 `systemctl status` 与 `journalctl -u investlab.service` 检查中断原因。

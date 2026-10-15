@@ -16,4 +16,4 @@ ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/investlab
 PrivateTmp=true
-TimeoutStartSec=900
+TimeoutStartSec=1800
