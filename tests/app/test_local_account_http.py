@@ -43,7 +43,11 @@ class LocalAccountHttpTests(unittest.TestCase):
             with urllib.request.urlopen(req, timeout=15) as response:
                 return response.status, json.load(response)
         except urllib.error.HTTPError as exc:
-            return exc.code, json.load(exc)
+            raw = exc.read()
+            try:
+                return exc.code, json.loads(raw)
+            except ValueError:
+                return exc.code, {"error": "HTTP server rejected request"}
 
     def valuation(self, **changes):
         payload = {"valuation_id": "browser-001", "account": "default",
