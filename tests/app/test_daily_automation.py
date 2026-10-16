@@ -20,6 +20,8 @@ class DailyAutomationTests(unittest.TestCase):
         from zoneinfo import ZoneInfo
         # 00:00 Tuesday UTC is 20:00 Monday in New York during DST.
         self.assertEqual(automation.nyse_session(datetime(2026,10,20,tzinfo=timezone.utc)), "2026-10-19")
+        # 18:00 UTC Monday is 14:00 NY: the US session has not closed.
+        self.assertIsNone(automation.nyse_session(datetime(2026,10,19,18,tzinfo=timezone.utc)))
         # Sunday UTC is Saturday NY time; no completed new trading session.
         self.assertIsNone(automation.nyse_session(datetime(2026,10,18,tzinfo=timezone.utc)))
         # Christmas Day 2026 is a market holiday.
