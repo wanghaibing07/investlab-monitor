@@ -145,6 +145,68 @@ async def load_private_home(home, *, expected_version=None):
     return True
 
 
+
+async def probe_private_recovery(*, limit=2):
+    """Read-only restoration rehearsal of latest private snapshots.
+
+    This checks checksum, SQLite integrity, confirmed non-demo account data.
+    It NEVER overwrites the active state, and same-store versions do not
+    constitute independent disaster-recovery backups.
+    """
+    if type(limit) is not int or not 1 <= limit <= 5:
+        raise ValueError("Invalid bounded recovery probe limit")
+    from investlab.core import connection
+    objects = await _list("state/")
+    names = sorted(o.pathname for o in objects if o.pathname.endswith(".zip"))
+    if not names:
+        return {
+            "status": "NO_ACCOUNT_SNAPSHOTS",
+            "snapshots_checked": 0,
+            "current_restorable": False,
+            "older_restorable": False,
+            "independent_backup_verified": False,
+            "automatic_recovery_verified": False,
+            "trading_enabled": False,
+            "checks": [],
+        }
+    checks = []
+    for index, pathname in enumerate(reversed(names[-limit:])):
+        name = "current" if index == 0 else f"previous_{index}"
+        with tempfile.TemporaryDirectory(prefix="investlab-recovery-probe-") as temp:
+            try:
+                home = Path(temp) / "restore"
+                raw = await _read(pathname)
+                await asyncio.to_thread(_restore_archive, home, raw)
+                await asyncio.to_thread(_check_account, home)
+                with connection(home, readonly=True) as db:
+                    result = db.execute("PRAGMA quick_check").fetchone()
+                if not result or result[0] != "ok":
+                    raise ValueError("Restored SQLite integrity check failed")
+                checks.append({"slot": name, "restorable": True})
+            except Exception as exc:
+                # Do not expose private pathname, account contents, credentials,
+                # SQLite diagnostics, or exception messages to the UI.
+                checks.append({"slot": name, "restorable": False,
+                               "failure_type": type(exc).__name__})
+    current = checks[0]["restorable"]
+    previous = any(item["restorable"] for item in checks[1:])
+    status = (
+        "CURRENT_SNAPSHOT_NOT_RESTORABLE" if not current else
+        "TWO_IN_STORE_SNAPSHOTS_RESTORABLE" if previous else
+        "CURRENT_SNAPSHOT_RESTORABLE_ONLY"
+    )
+    return {
+        "status": status,
+        "snapshots_checked": len(checks),
+        "current_restorable": current,
+        "older_restorable": previous,
+        "independent_backup_verified": False,
+        "automatic_recovery_verified": False,
+        "trading_enabled": False,
+        "checks": checks,
+    }
+
+
 async def private_account_verified():
     """Read and validate actual private state; no inference from missing run reports.
 
