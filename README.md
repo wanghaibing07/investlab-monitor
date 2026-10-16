@@ -53,7 +53,7 @@ investlab --home ./runtime/demo run
 investlab --home ./runtime/demo serve
 ~~~
 
-打开 **http://127.0.0.1:8765** 即可查看本地看板；按 \`Ctrl+C\` 停止服务。Windows PowerShell 将激活命令改为 \`.\.venv\Scripts\Activate.ps1\`。
+打开 **http://127.0.0.1:8765** 即可查看本地看板；按 `Ctrl+C` 停止服务。Windows PowerShell 将激活命令改为 `.\.venv\Scripts\Activate.ps1`。
 
 想检查演示结果是否自洽，可在另一个终端运行：
 
