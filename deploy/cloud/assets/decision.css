@@ -275,3 +275,15 @@ body{background:#f2f4f0;color:var(--text);font-size:14px}
  .sidebar{background:#142824}
 }
 @media(prefers-reduced-motion:reduce){.page-view,.panel{animation:none}}
+
+/* Final usability audit: touch targets, text wrapping and device safe areas. */
+button,a{touch-action:manipulation}
+h1,h2,.decision-headline{text-wrap:balance}
+.dialog{overscroll-behavior:contain}
+@supports(padding:max(0px)){
+ .app-footer{padding-bottom:max(25px,env(safe-area-inset-bottom))}
+ @media(max-width:880px){
+   .topbar{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
+   .sidebar{padding-bottom:max(21px,env(safe-area-inset-bottom))}
+ }
+}
