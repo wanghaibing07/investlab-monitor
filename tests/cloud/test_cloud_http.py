@@ -105,8 +105,8 @@ class CloudWebSecurityTests(unittest.TestCase):
         self.assertIn('id="token"',page.text)
         self.assertIn('type="password"',page.text)
         self.assertIn('/setup.js',page.text)
-        self.assertNotIn('12000',page.text)
-        self.assertNotIn('8000',page.text)
+        self.assertNotIn('91234',page.text)
+        self.assertNotIn('56789',page.text)
         script=self.client.get("/setup.js")
         self.assertEqual(script.status_code,200)
         self.assertIn('"/api/initialize"',script.text)
@@ -116,11 +116,11 @@ class CloudWebSecurityTests(unittest.TestCase):
 
     def test_authorized_init_returns_verified_persisted_cny_receipt(self):
         payload={"as_of":"2026-10-16",
-                 "values":{"QQQ":"12000","TQQQ":"0","QLD":"0","CASH":"8000"},
+                 "values":{"QQQ":"5700","TQQQ":"0","QLD":"0","CASH":"2300"},
                  "note":"Account owner confirmed 2026-10-16 valuation",
                  "confirmed":True}
         readback={"verified":True,"as_of":"2026-10-16",
-                  "values":payload["values"],"total_value_cny":20000}
+                  "values":payload["values"],"total_value_cny":8000}
         with (patch.dict(os.environ,{"INVESTLAB_ADMIN_TOKEN":"Z"*48,
                                     "BLOB_READ_WRITE_TOKEN":"set"}),
               patch("investlab.cloud.initialize_private_account",
@@ -140,7 +140,7 @@ class CloudWebSecurityTests(unittest.TestCase):
 
     def test_failed_readback_is_not_claimed_as_success(self):
         payload={"as_of":"2026-10-16",
-                 "values":{"QQQ":"12000","TQQQ":"0","QLD":"0","CASH":"8000"},
+                 "values":{"QQQ":"5700","TQQQ":"0","QLD":"0","CASH":"2300"},
                  "note":"Owner confirmed CNY values","confirmed":True}
         with (patch.dict(os.environ,{"INVESTLAB_ADMIN_TOKEN":"Z"*48,
                                     "BLOB_READ_WRITE_TOKEN":"set"}),
