@@ -174,6 +174,7 @@
     setText("metric-quality",quality);setText("metric-quality-sub",qualitySub);
     const ready=readiness(),banner=$("readiness-banner");
     banner.className="notice notice-"+ready.kind;
+    banner.hidden=!!state.brief; // The decision brief already explains this state; avoid duplicate alerts.
     setText("readiness-title",ready.heading);setText("readiness-subtitle",ready.copy);
     setText("allocation-date",valid?"截至 "+dateText(a.as_of):"暂无估值");
     renderDonut();
