@@ -49,7 +49,7 @@ class DecisionBriefTests(unittest.TestCase):
         self.assertEqual(out["metrics"]["qqq_vol20_pct"],22.4)
         self.assertEqual(out["report_session"],"2026-10-14")
         self.assertEqual(out["conditions"][2]["met"],False)
-        self.assertIn("人工",out["next_step"])
+        self.assertIn("本人决定",out["next_step"])
 
     def test_verified_tech_does_not_mean_market_current(self):
         account,run,report=example()
