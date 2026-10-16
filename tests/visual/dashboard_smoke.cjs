@@ -133,8 +133,7 @@ async function inspect(browser, base, scenario, vp) {
         await page.locator("#mobile-menu").click();
       }
       await page.locator('.nav-item[data-route="portfolio"]').click();
-      assert.equal(await page.locator('[data-page="portfolio"]').isVisible(), true,
-        label + " portfolio nav failed");
+      await page.locator('[data-page="portfolio"]').waitFor({ state: "visible", timeout: 5000 });
       await page.screenshot({ path: path.join(OUT, label + "-portfolio.png"),
         fullPage: true, animations: "disabled" });
       if (scenario === "first-run") {
