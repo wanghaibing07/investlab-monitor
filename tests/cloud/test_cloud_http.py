@@ -101,22 +101,37 @@ class CloudWebSecurityTests(unittest.TestCase):
         self.assertNotIn("token", response.text)
         latest.assert_not_awaited()
 
-    def test_setup_form_has_no_admin_token_and_supports_updates(self):
-        page=self.client.get("/setup")
-        self.assertEqual(page.status_code,200)
-        self.assertNotIn('id="token"',page.text)
-        self.assertNotIn('INVESTLAB_ADMIN_TOKEN',page.text)
-        self.assertNotIn('type="password"',page.text)
-        self.assertNotIn('91234',page.text)
-        self.assertIn('/setup.js',page.text)
-        script=self.client.get("/setup.js")
-        self.assertEqual(script.status_code,200)
-        self.assertIn('"/api/initialize"',script.text)
-        self.assertIn('"/api/valuation"',script.text)
-        self.assertIn('"/api/account"',script.text)
-        self.assertNotIn('Admin-Token',script.text)
-        self.assertIn('script-src',page.headers["content-security-policy"])
-        self.assertIn('connect-src',script.headers["content-security-policy"])
+    def test_dashboard_pages_use_self_hosted_assets(self):
+        for path in ("/", "/setup"):
+            page=self.client.get(path)
+            self.assertEqual(page.status_code,200,page.text[:250])
+            self.assertIn("InvestLab — 私人投资工作台",page.text)
+            self.assertIn('/assets/app.js',page.text)
+            self.assertIn('/assets/app.css',page.text)
+            self.assertIn('data-page="overview"',page.text)
+            self.assertIn('data-page="research"',page.text)
+            self.assertIn('data-page="runs"',page.text)
+            self.assertIn('id="valuation-dialog"',page.text)
+            self.assertNotIn('id="token"',page.text)
+            self.assertNotIn('INVESTLAB_ADMIN_TOKEN',page.text)
+            self.assertNotIn('12000',page.text)
+            self.assertNotIn('7500',page.text)
+            policy=page.headers["content-security-policy"]
+            self.assertIn("script-src 'self'",policy)
+            self.assertIn("style-src 'self'",policy)
+            self.assertIn("frame-ancestors 'none'",policy)
+        js=self.client.get("/assets/app.js")
+        css=self.client.get("/assets/app.css")
+        self.assertEqual(js.status_code,200)
+        self.assertEqual(css.status_code,200)
+        self.assertIn('"/api/history"',js.text)
+        self.assertIn('"/api/initialize"',js.text)
+        self.assertIn('"/api/valuation"',js.text)
+        self.assertIn('"/api/run"',js.text)
+        self.assertIn("account_initialized",js.text)
+        self.assertIn("min-width",css.text)
+        self.assertNotIn('Admin-Token',js.text)
+        self.assertNotIn('12000',js.text)
 
     def test_initialization_requires_no_secret_and_verifies_readback(self):
         payload={"as_of":"2026-10-16",
@@ -216,6 +231,63 @@ class CloudWebSecurityTests(unittest.TestCase):
             self.assertEqual(self.client.post("/api/initialize",
                 data="hello",headers={"Origin":"https://testserver",
                 "Content-Type":"text/plain"}).status_code,415)
+
+    def test_valuation_history_returns_actual_persisted_records(self):
+        data={"account_initialized":True,"has_more":False,"history":[{
+            "as_of":"2026-10-14",
+            "values":{"QQQ":"6000","TQQQ":"0","QLD":"0","CASH":"4000"},
+            "total_value_cny":10000,"note":"confirmed synthetic fixture"
+        }]}
+        with (patch.dict(os.environ,{"BLOB_READ_WRITE_TOKEN":"configured"}),
+              patch("investlab.cloud.read_private_history",
+                    new=AsyncMock(return_value=data)) as read):
+            result=self.client.get("/api/history")
+        self.assertEqual(result.status_code,200)
+        self.assertEqual(result.json()["history"][0]["total_value_cny"],10000)
+        read.assert_awaited_once_with(limit=100)
+
+    def test_manual_monitor_requires_same_origin_and_confirmed_account_version(self):
+        version="state/20261016T103339961525Z-"+"a"*32+".zip"
+        request={"confirmed":True,"expected_state_version":version}
+        account={"account_initialized":True,"state_version":version}
+        result={"status":"SUCCEEDED","qualified_online":True,
+                "audit":"PASS","research_verification":"PASS",
+                "trading_enabled":False}
+        with (patch.dict(os.environ,{"BLOB_READ_WRITE_TOKEN":"configured"}),
+              patch("investlab.cloud.read_private_account",
+                    new=AsyncMock(return_value=account)) as read,
+              patch("investlab.cloud.run_private_daily",
+                    new=AsyncMock(return_value=result)) as run):
+            self.assertEqual(self.client.post("/api/run",json=request).status_code,403)
+            self.assertEqual(self.client.post("/api/run",json=request,
+                headers={"Origin":"https://malicious.example"}).status_code,403)
+            self.assertEqual(self.client.post("/api/run",json={
+                "confirmed":False,"expected_state_version":version},
+                headers={"Origin":"https://testserver"}).status_code,422)
+            self.assertEqual(self.client.post("/api/run",json={
+                "confirmed":True,"expected_state_version":"invalid"},
+                headers={"Origin":"https://testserver"}).status_code,422)
+            run.assert_not_awaited()
+            valid=self.client.post("/api/run",json=request,headers={"Origin":"https://testserver"})
+        self.assertEqual(valid.status_code,200,valid.text)
+        self.assertTrue(valid.json()["qualified_online"])
+        self.assertFalse(valid.json()["trading_enabled"])
+        read.assert_awaited_once()
+        run.assert_awaited_once_with(expected_version=version)
+
+    def test_manual_monitor_rejects_stale_or_missing_account(self):
+        version="state/20261016T103339961525Z-"+"b"*32+".zip"
+        request={"confirmed":True,"expected_state_version":version}
+        with (patch.dict(os.environ,{"BLOB_READ_WRITE_TOKEN":"configured"}),
+              patch("investlab.cloud.read_private_account",
+                    new=AsyncMock(return_value={
+                      "account_initialized":True,
+                      "state_version":"state/20261016T103339961525Z-"+"c"*32+".zip"
+                    })),
+              patch("investlab.cloud.run_private_daily",new=AsyncMock()) as run):
+            response=self.client.post("/api/run",json=request,headers={"Origin":"https://testserver"})
+        self.assertEqual(response.status_code,409)
+        run.assert_not_awaited()
 
     def test_docs_disabled_and_cloud_is_vaulted(self):
         self.assertEqual(self.client.get("/docs").status_code,404)
