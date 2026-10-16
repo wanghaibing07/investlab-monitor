@@ -53,7 +53,7 @@ investlab --home ./runtime/demo run
 investlab --home ./runtime/demo serve
 ~~~
 
-Open **http://127.0.0.1:8765**. Press \`Ctrl+C\` to stop the server. On Windows PowerShell, activate the environment with \`.\.venv\Scripts\Activate.ps1\` instead.
+Open **http://127.0.0.1:8765**. Press `Ctrl+C` to stop the server. On Windows PowerShell, activate the environment with `.\.venv\Scripts\Activate.ps1` instead.
 
 To verify the local demo in a second terminal, run:
 
