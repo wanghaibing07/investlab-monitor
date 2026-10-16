@@ -27,7 +27,14 @@ jobs:
           import json
           cfg=json.loads(Path("deploy/cloud/vercel.json").read_text())
           assert cfg["framework"]=="fastapi"
-          assert "crons" not in cfg, "Do not activate cron until account + auth are tested"
+          # Both jobs run at most once each day on eligible UTC Tue-Sat.
+          assert cfg["crons"] == [
+              {"path": "/api/cron/daily", "schedule": "0 0 * * 2-6"},
+              {"path": "/api/cron/watchdog", "schedule": "0 3 * * 2-6"},
+          ]
+          from investlab import automation
+          assert automation.nyse_session and automation.execute_once
+          print("CLOUD_CRON_PACKAGE_GATE_PASS")
           from investlab import cloud
           assert cloud.MAX_ARCHIVE_BYTES<=30*1024*1024
           print("PRIVATE_CLOUD_PACKAGE_GATE_PASS")
