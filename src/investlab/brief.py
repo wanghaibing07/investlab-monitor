@@ -68,6 +68,22 @@ def _historical_signal(report: dict, run: dict) -> dict | None:
     }
 
 
+def _manual_next_step(steps: list[dict]) -> str:
+    """One concrete manual-review priority grounded in the computed step deltas."""
+    for direction, phrase in (("REDUCE_REVIEW", "减少"), ("INCREASE_REVIEW", "增加")):
+        matching = [s for s in steps if s["action"] == direction and
+                    s["estimated_difference_cny"] != 0]
+        if not matching:
+            continue
+        part = matching[0]
+        amount = abs(part["estimated_difference_cny"])
+        return (
+            f"优先评估{phrase} {part['symbol']} 的本步参考差额（约 ¥{amount:,}）；"
+            "先核对最新价格、持仓、交易成本和可承受回撤，再由本人决定是否交易。"
+        )
+    return "模型本步建议维持现有配置；关注下一个完整交易日的行情变化，无需因运行监控而重复交易。"
+
+
 def _base(account: dict | None, run: dict | None, report: dict | None) -> dict:
     account = account if isinstance(account, dict) else {}
     run = run if isinstance(run, dict) else {}
@@ -231,9 +247,7 @@ def decision_brief(account: dict | None, run: dict | None, report: dict | None) 
     out.update(status="ACTION_REVIEW", actionable=True,
                priority="REVIEW" if any(s["action"] != "HOLD" for s in steps) else "HOLD",
                headline=title, explanation=why,
-               next_step=("先核对真实估值、个人可承受回撤和交易成本；如认可策略，再由本人决定是否交易。"
-                          if any(s["action"] != "HOLD" for s in steps)
-                          else "维持当前持仓并观察下一交易日行情，不重复产生新交易。"),
+               next_step=_manual_next_step(steps),
                steps=steps, metrics={
                    "trend_active": review.get("trend_active") if type(review.get("trend_active")) is bool else None,
                    "qqq_vol20_pct": _number(review.get("qqq_vol20_pct")),
