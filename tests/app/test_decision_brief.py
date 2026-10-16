@@ -51,6 +51,78 @@ class DecisionBriefTests(unittest.TestCase):
         self.assertEqual(out["conditions"][2]["met"],False)
         self.assertIn("本人决定",out["next_step"])
 
+    def test_confirmed_account_produces_review_amounts_not_trade_orders(self):
+        account, run, report = example()
+        result = decision_brief(account, run, report)
+        self.assertTrue(result["actionable"])
+        self.assertTrue(result["manual_only"])
+        self.assertFalse(result["trading_enabled"])
+        self.assertEqual(result["portfolio_total_cny"], 10000)
+        self.assertEqual(result["cash_current_cny"], 3500)
+        self.assertEqual(result["steps"][0]["current_value_cny"], 6000)
+        self.assertEqual(result["steps"][0]["estimated_difference_cny"], 0)
+        self.assertEqual(result["steps"][1]["current_value_cny"], 500)
+        self.assertEqual(result["steps"][1]["step_reference_value_cny"], 750)
+        self.assertEqual(result["steps"][1]["estimated_difference_cny"], 250)
+        self.assertEqual(result["cash_step_reference_cny"], 3250)
+        self.assertEqual(result["estimated_cash_change_cny"], -250)
+        self.assertTrue(result["amounts_are_illustrative"])
+
+    def test_review_tells_user_which_asset_to_check_and_amount(self):
+        account, run, report = example()
+        result = decision_brief(account, run, report)
+        self.assertEqual(result["status"], "ACTION_REVIEW")
+        self.assertIn("增加 TQQQ", result["next_step"])
+        self.assertIn("¥250", result["next_step"])
+        self.assertIn("由本人决定", result["next_step"])
+        self.assertFalse(result["trading_enabled"])
+
+    def test_review_prioritizes_deleveraging_over_new_additions(self):
+        account, run, report = example()
+        report["review"]["next_review_weights"] = {
+            "QQQ": .70, "TQQQ": .03, "QLD": 0.0, "CASH": .27
+        }
+        report["review"]["actions"]["QQQ"] = "INCREASE_REVIEW"
+        report["review"]["actions"]["TQQQ"] = "REDUCE_REVIEW"
+        result = decision_brief(account, run, report)
+        self.assertEqual(result["status"], "ACTION_REVIEW")
+        self.assertIn("减少 TQQQ", result["next_step"])
+        self.assertIn("¥200", result["next_step"])
+
+    def test_stale_verified_run_keeps_historical_observation_not_trade_steps(self):
+        account, run, report = example()
+        report["market_session_current"] = False
+        report["is_actionable"] = False
+        result = decision_brief(account, run, report)
+        self.assertEqual(result["status"], "MARKET_STALE")
+        self.assertFalse(result["actionable"])
+        self.assertEqual(result["steps"], [])
+        self.assertTrue(result["historical_signal"]["not_current_advice"])
+        self.assertEqual(result["historical_signal"]["session"], "2026-10-14")
+        self.assertIn("分步复核", result["historical_signal"]["headline"])
+        self.assertNotIn("estimated_difference_cny", result)
+
+    def test_account_mismatch_can_show_historical_observation_but_no_steps(self):
+        account, run, report = example()
+        account["values"]["TQQQ"] = "700"
+        account["values"]["CASH"] = "3300"
+        result = decision_brief(account, run, report)
+        self.assertEqual(result["status"], "ACCOUNT_MISMATCH")
+        self.assertFalse(result["actionable"])
+        self.assertEqual(result["steps"], [])
+        self.assertIsNotNone(result["historical_signal"])
+        self.assertTrue(result["historical_signal"]["not_current_advice"])
+
+    def test_failed_or_unverified_run_never_exports_previous_historical_signal(self):
+        account, run, report = example()
+        run["status"] = "FAILED"
+        result = decision_brief(account, run, report)
+        self.assertIsNone(result["historical_signal"])
+        run["status"] = "SUCCEEDED"
+        run["qualified_online"] = False
+        result = decision_brief(account, run, report)
+        self.assertIsNone(result["historical_signal"])
+
     def test_verified_tech_does_not_mean_market_current(self):
         account,run,report=example()
         report["market_session_current"]=False

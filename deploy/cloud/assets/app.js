@@ -97,10 +97,13 @@
     const badge=$("decision-badge");
     badge.textContent=status;badge.className="decision-status"+(actionable?"":verified?" is-wait":" is-blocked");
     setText("decision-proof-status",actionable?"可以复核配置":verified?"检查通过，但不可执行":"尚未达到行动条件");
-    setText("decision-proof-sub",actionable?"报告、行情和当前账户已匹配":"不能把技术 PASS 直接解释为买入或卖出");
+    setText("decision-proof-sub",actionable?"数据质量与配置条件均已核对，仍需本人决定":"技术 PASS 仅证实数据与审计，当前策略意见需另行判断");
     $("decision-proof-status").parentElement.dataset.verified=String(actionable);
     setText("decision-session",b&&b.report_session?dateText(b.report_session):"待核验");
     setText("decision-account-date",state.account&&state.account.account_initialized?dateText(state.account.as_of):"未保存");
+    const actualPortfolio=state.account&&state.account.account_initialized===true;
+    setText("decision-proof-total",actualPortfolio?amount(total(state.account)):"—");
+    setText("decision-proof-total-date",actualPortfolio?"已确认估值日 "+dateText(state.account.as_of):"尚未读取真实资产");
     setText("decision-evidence",verified?"在线核验通过":"待通过");
     setText("decision-applicable",actionable?"与当前账户一致":b&&b.status==="ACCOUNT_MISMATCH"?"需更新结论":"不生成交易建议");
     const tickets=$("decision-action-tickets");clear(tickets);
@@ -123,7 +126,63 @@
       details.appendChild(element("small","",verified?"本轮暂不输出配置比例":"先验证再判断，不猜测行情。"));
       placeholder.appendChild(details);tickets.appendChild(placeholder);
     }
+    renderDecisionAllocation(b,actionable);
+    renderHistoricalSignal(b,actionable);
     renderDecisionEvidence();
+  }
+  function renderDecisionAllocation(brief,actionable){
+    const panel=$("decision-allocation"),container=$("decision-allocation-rows");
+    clear(container);
+    const steps=brief&&brief.steps;
+    const totalCny=brief&&brief.portfolio_total_cny;
+    const valid=actionable&&Array.isArray(steps)&&
+      Number.isSafeInteger(totalCny)&&totalCny>0&&
+      steps.length>=2&&steps.every(step=>["QQQ","TQQQ"].includes(step.symbol)&&
+        Number.isSafeInteger(step.current_value_cny)&&
+        Number.isSafeInteger(step.step_reference_value_cny)&&
+        Number.isSafeInteger(step.estimated_difference_cny)&&
+        typeof step.current_weight==="number"&&
+        typeof step.reference_weight==="number");
+    panel.hidden=!valid;
+    if(!valid)return;
+    for(const step of steps){
+      const row=element("div","decision-allocation-row");
+      const heading=element("div","decision-allocation-info");
+      const title=element("strong","",step.symbol);
+      const action=element("span","action-verdict",step.label);
+      heading.appendChild(title);heading.appendChild(action);
+      row.appendChild(heading);
+      const bar=element("div","decision-allocation-track");
+      const base=element("span","decision-allocation-current");
+      const ref=element("span","decision-allocation-next");
+      base.style.width=Math.min(100,Math.max(0,100*step.current_weight)).toFixed(2)+"%";
+      ref.style.width=Math.min(100,Math.max(0,100*step.reference_weight)).toFixed(2)+"%";
+      bar.appendChild(base);bar.appendChild(ref);row.appendChild(bar);
+      const metrics=element("div","decision-allocation-metrics");
+      metrics.appendChild(element("span","",percent(step.current_weight*100)+" → "+percent(step.reference_weight*100)));
+      const difference=step.estimated_difference_cny;
+      const delta=element("strong","decision-amount"+(difference>0?" is-add":difference<0?" is-reduce":""),
+        difference>0?"参考多配约 "+amount(difference):difference<0?"参考少配约 "+amount(Math.abs(difference)):"参考金额基本不变");
+      metrics.appendChild(delta);row.appendChild(metrics);container.appendChild(row);
+    }
+    const footer=element("div","decision-allocation-cash");
+    const currentCash=brief.cash_current_cny, nextCash=brief.cash_step_reference_cny;
+    if(Number.isSafeInteger(currentCash)&&Number.isSafeInteger(nextCash)){
+      footer.appendChild(element("span","", "现金参考："+amount(currentCash)+" → "+amount(nextCash)));
+      footer.appendChild(element("strong","", "仅用于检视配置，不是可执行买卖金额"));
+      container.appendChild(footer);
+    }
+  }
+  function renderHistoricalSignal(brief,actionable){
+    const section=$("historical-signal");
+    const signal=brief&&brief.historical_signal;
+    const visible=!actionable&&signal&&signal.not_current_advice===true&&
+      typeof signal.headline==="string"&&typeof signal.explanation==="string";
+    section.hidden=!visible;
+    if(!visible)return;
+    setText("historical-signal-title",signal.headline);
+    setText("historical-signal-date",signal.session?dateText(signal.session):"记录日期待核验");
+    setText("historical-signal-description",signal.explanation);
   }
   function renderDecisionEvidence(){
     const b=state.brief,valid=b&&b.actionable===true&&b.status==="ACTION_REVIEW";
