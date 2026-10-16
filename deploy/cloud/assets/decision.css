@@ -413,3 +413,8 @@ body{letter-spacing:.004em}
  .notice-body p{line-height:1.65}
 }
 @media(prefers-reduced-motion:reduce){.decision-workbench,.action-ticket{transition:none}}
+
+/* Read-only restore proof; text explicitly distinguishes same-store versions from DR. */
+.recovery-panel{padding:22px;margin-top:20px}
+.recovery-panel .panel-head{margin-bottom:15px}
+.recovery-panel #recovery-result{margin:14px 0 0;color:var(--muted);line-height:1.7;font-size:13px;max-width:70ch}
