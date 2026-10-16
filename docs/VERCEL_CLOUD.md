@@ -41,6 +41,20 @@
 
 **手动运行：** 点击“运行一次监控”，阅读说明确认后同源 HTTPS POST `/api/run`，携带最新已确认的快照版本。服务端会验证该版本仍为最新，再执行在线行情校验、账本审计和研究校验。计算期间账户版本变化则拒绝保存计算出的新账户版本。结果不合格或请求失败不会显示为成功。这个基于 Blob 的版本检查**不是分布式事务锁**；启用自动并发/定时更新前必须建立可靠互斥措施。
 
+## 决策简报：校验通过 ≠ 立刻交易
+
+人类用户从 `/` 进入「今日决策简报」，不要把 `/api/status` 的 `SUCCEEDED` 或 `PASS` 当成买卖意见。专门的私有只读接口 `GET /api/brief` 综合三份已核实数据：
+
+1. 当前私有账户的人民币持仓快照，含估值日期和 QQQ/TQQQ/QLD/现金金额；
+2. 最近一次存入 Blob 的执行收据，要求在线行情合格、账本审计和研究验证均通过；
+3. 完整持久化的 `service.latest` 模型报告，检查当次行情是否仍是最新完整交易日、运行是否已经成功结束、配置研究是否有效、与当前账户的全部金额及日期是否完全相同。
+
+满足所有条件时，简报显示「模型复核标题 → 为什么 → 你下一步怎么处理 → QQQ/TQQQ 当前权重与**本步**参考权重 → 条件与风险说明」。权重源自项目 `advisory.observe` 的 `actions` 和 `next_review_weights`，不能用最终目标 60/40 冒充本步配置；全体权重合计应为 100%，操作方向必须和权重变化一致。文案始终使用「评估增加 / 评估减少 / 维持」，不输出可执行股数、不发送订单。
+
+在技术检查通过但账户估值变化、行情过期、最新运行失败、模型意见缺失时，状态分别是 `ACCOUNT_MISMATCH` / `MARKET_STALE` / `LAST_RUN_FAILED` / `MODEL_BLOCKED` 等，**明确隐藏**本步权重与买卖意见，建议先补齐证据。页面还显示行情交易日、账户估值日、报告生成时间与操作适用状态。因账户持有人确认日可能晚于美股最新收盘日，日期不相同时必须再核对报价和资金情况。
+
+**设计与代码审查来源**：参考 GitHub 上的 Anthropic [Frontend Design](https://github.com/anthropics/skills/tree/main/skills/frontend-design)、[UI/UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) 及 Vercel [Web Interface Guidelines](https://github.com/vercel-labs/agent-skills/tree/main/skills/web-design-guidelines)。采用纸白/深绿的研究简报层级；将首屏注意力用于「判断、依据、人工下一步」，资产卡片和分析图退居其后。导航、空状态、移动适配、对话框、键盘焦点与错误提示必须保持可用。
+
 ## 当前边界
 
 此路径面向**单账户、单写入者**初始阶段。私有 Blob 是版本化文件存储，**不是关系数据库事务引擎**。即使能保存 SQLite 备份，也不能在重叠的 Cron/手工写入时保证全局串行。实际连续运行前必须引入数据库事务锁（如 Vercel Marketplace Postgres）或经验证的互斥方案。禁止把真实账户数据写入静态构建、公开 Blob 或 GitHub。
