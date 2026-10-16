@@ -275,3 +275,132 @@ body{background:#f2f4f0;color:var(--text);font-size:14px}
  .sidebar{background:#142824}
 }
 @media(prefers-reduced-motion:reduce){.page-view,.panel{animation:none}}
+
+
+/* Research Desk 3 — UI quality pass: evidence first, no decorative KPI theatre.
+   The first viewport is a decision summary. The analytical details follow. */
+:root{--focus:#51795c}
+body{letter-spacing:.004em}
+.content{max-width:1590px}
+.page-head{margin:0 0 21px;align-items:end}
+.page-head h1{font-size:clamp(28px,2.7vw,38px);letter-spacing:-.052em;line-height:1.22;margin:4px 0 8px}
+.page-head .page-sub{max-width:690px;line-height:1.8}
+.page-head .eyebrow{color:#637e68}
+.topbar{min-height:70px}
+.topbar .crumb strong{font-weight:710}
+.nav-item{min-height:44px;font-size:13px}
+.nav-item.is-active{font-weight:750}
+.panel{box-shadow:0 2px 0 rgba(24,55,38,.012)}
+.panel-head h2{font-weight:780;font-size:16px}
+.panel-kicker{font-size:10px;letter-spacing:.06em}
+.stat-grid{margin-bottom:16px}
+.stat-card{min-height:125px;padding:21px 21px 18px}
+.stat-card.is-primary{background:#e6efe6;border-color:#b7d5bd}
+.stat-card.is-primary:after{opacity:.4}
+.stat-value{font-size:clamp(23px,2.2vw,32px);margin-top:15px;letter-spacing:-.055em}
+.stat-text{font-size:24px}
+.stat-footer{margin-top:12px}
+.decision-workbench{grid-template-columns:minmax(0,1.6fr) minmax(292px,.76fr);background:#163e32;border:1px solid #345b4b;box-shadow:0 18px 50px rgba(15,47,34,.095);margin:0 0 18px}
+.decision-primary-panel{background:radial-gradient(ellipse at 100% 1%,rgba(195,231,157,.12) 0%,transparent 56%),#153b30;padding:clamp(23px,2.6vw,36px)}
+.decision-heading{border-bottom:1px solid rgba(213,236,205,.15);padding-bottom:14px}
+.decision-overline{font-size:12px;letter-spacing:0;color:#baddb2}
+.decision-status{border-radius:100px;padding:6px 13px;background:#2a5d48}
+.decision-headline{font-size:clamp(29px,3.1vw,40px);line-height:1.29;max-width:790px;margin:20px 0 12px;letter-spacing:-.048em}
+.decision-description{font-size:13px;line-height:1.8;color:#bdd6c6;margin-bottom:18px;max-width:735px}
+.next-action{background:rgba(199,229,169,.1);border:1px solid rgba(199,229,169,.18);border-left:4px solid #d2eca9;border-radius:10px;padding:16px 18px}
+.next-action-label{font-size:11px;color:#d4edbb}
+.next-action p{font-size:15px;line-height:1.75;font-weight:660;max-width:650px}
+.action-tickets{gap:12px;margin-top:15px}
+.action-ticket{background:#234d3e;border-color:#476d54;border-radius:10px;min-height:69px;padding:13px 17px}
+.action-ticket strong{font-size:14px;letter-spacing:.01em}
+.action-ticket small{font-size:12px;line-height:1.55}
+.action-ticket .ticket-arrow{font-size:22px}
+.decision-proof{background:#e6efe5;padding:clamp(22px,2.6vw,33px);border-color:#486755}
+.proof-top{color:#5b7966;font-size:12px}
+.proof-score{padding:18px 0 15px}
+.proof-score strong{font-size:23px;line-height:1.3;letter-spacing:-.05em}
+.proof-score span{font-size:12px;line-height:1.6}
+.proof-grid>div{padding:14px 0;align-items:baseline}
+.proof-grid dt{font-size:12px;white-space:nowrap}
+.proof-grid dd{font-size:12px;overflow-wrap:anywhere}
+.proof-disclaimer{border-top:1px solid #d2dfcf;padding-top:13px;line-height:1.7;margin-top:14px}
+.decision-footer{margin-top:19px;padding-top:14px}
+.decision-allocation{margin-top:16px;padding:18px 17px 13px;background:#193f34;border:1px solid rgba(197,232,194,.23);border-radius:11px}
+.decision-allocation-header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:14px}
+.decision-allocation-header h3{font-size:13px;font-weight:770;margin:0;color:#e6f4db}
+.decision-allocation-header span{font-size:10px;color:#b7d2be;text-align:right}
+.decision-allocation-rows{display:grid;gap:16px}
+.decision-allocation-row{display:grid;gap:7px}
+.decision-allocation-info{display:flex;gap:10px;align-items:center}
+.decision-allocation-info strong{font-size:13px;color:#fff;letter-spacing:.025em}
+.action-verdict{border:1px solid #537763;background:#2c5b47;border-radius:6px;color:#daebd6;padding:2px 7px;font-size:10px;font-weight:700}
+.decision-allocation-track{position:relative;height:8px;border-radius:99px;background:#345e4e}
+.decision-allocation-track span{position:absolute;left:0;border-radius:99px;height:100%;display:block}
+.decision-allocation-current{background:#749b89;z-index:1;opacity:.73}
+.decision-allocation-next{height:3px!important;top:2.5px!important;background:#d8eaa1;z-index:2;box-shadow:0 0 0 1px #133c2b}
+.decision-allocation-metrics{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:11px;color:#bfddc8}
+.decision-allocation-metrics strong{font-size:12px;font-weight:750;white-space:nowrap}
+.decision-amount.is-add{color:#d4efa2}
+.decision-amount.is-reduce{color:#f4c5a6}
+.decision-allocation-cash{padding-top:13px;border-top:1px solid #466b57;display:flex;gap:12px;justify-content:space-between;flex-wrap:wrap;font-size:11px;color:#cde1cc}
+.decision-allocation-cash strong{font-size:10px;font-weight:540;color:#a7c5b4}
+.decision-amount-note{color:#b5cdb9;font-size:10px;line-height:1.8;margin:13px 0 0}
+.historical-signal{margin-top:16px;background:#284c3b;border:1px solid #8b9e70;border-radius:10px;padding:15px 18px}
+.historical-signal-header{display:flex;gap:15px;justify-content:space-between;color:#e0e9b3;font-weight:710;font-size:11px;margin-bottom:10px}
+.historical-signal strong{display:block;color:#fff6d7;font-size:15px;line-height:1.5}
+.historical-signal p{font-size:12px;color:#d5e1d0;line-height:1.75;margin:6px 0 10px}
+.historical-signal-limit{display:block;color:#eac89a;font-size:10px;line-height:1.7}
+.notice{margin-bottom:16px}
+.model-logic-panel{margin-bottom:16px}
+.logic-overview strong{font-size:18px}
+.condition-item{min-height:68px;align-items:center}
+.analytic-grid,.lower-grid{gap:16px}
+.chart-frame,.allocation-graphic{background:transparent}
+.holdings-list .holding-item{padding:15px 0}
+.holding-progress{height:7px;background:#e3ebe4}
+.holding-progress>span{border-radius:99px}
+.data-table td{font-size:13px;border-color:#e6ece6}
+.data-table th{font-size:11px;letter-spacing:.02em}
+.data-table tbody tr:hover td{background:#eef4ed}
+.risk-metric{background:#f4f7f2;border:1px solid #dee8df}
+.risk-metric>span{color:#57745f}
+.risk-metric strong{color:#203b2a}
+.risk-metric small{color:#718471}
+.table-ticker .ticker-icon,.holding-left .ticker-icon{border-radius:10px}
+.panel-foot .text-link,.text-link{font-weight:730}
+.dialog{border-radius:17px}
+.dialog .form-row input,.dialog .form-row textarea{border-radius:9px}
+.button{min-height:43px;font-size:12px}
+.button:focus-visible,.nav-item:focus-visible,.text-link:focus-visible{outline:3px solid #7db881;outline-offset:3px}
+@media(max-width:1250px){
+ .decision-workbench{grid-template-columns:minmax(0,1.35fr) minmax(245px,.65fr)}
+ .decision-proof{padding:23px 21px}
+ .decision-primary-panel{padding:27px}
+}
+@media(max-width:940px){
+ .decision-workbench{grid-template-columns:1fr}
+ .decision-proof{border-left:0;border-top:1px solid #486755}
+ .proof-grid{grid-template-columns:repeat(2,1fr)}
+ .page-head{align-items:flex-start}
+}
+@media(max-width:640px){
+ .content{padding:19px 14px 40px}
+ .topbar{min-height:62px}
+ .page-head h1{font-size:29px}
+ .decision-primary-panel{padding:22px 16px}
+ .decision-headline{font-size:29px}
+ .decision-description{font-size:12px}
+ .decision-allocation{padding:14px}
+ .decision-allocation-header{display:block}
+ .decision-allocation-header span{display:block;text-align:left;margin-top:4px}
+ .decision-allocation-metrics{align-items:flex-start;flex-wrap:wrap}
+ .decision-proof{padding:19px 16px}
+ .proof-grid{grid-template-columns:1fr}
+ .decision-footer{flex-wrap:wrap}
+ .stat-grid{gap:10px}
+ .stat-card{min-height:126px;padding:15px}
+ .stat-value{font-size:21px}
+ .panel{padding:19px 15px}
+ .notice-body p{line-height:1.65}
+}
+@media(prefers-reduced-motion:reduce){.decision-workbench,.action-ticket{transition:none}}
