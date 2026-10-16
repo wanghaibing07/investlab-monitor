@@ -35,6 +35,7 @@ jobs:
           node --check deploy/cloud/assets/app.js
           test -s deploy/cloud/assets/index.html
           test -s deploy/cloud/assets/app.css
+          test -s deploy/cloud/assets/decision.css
       - name: Import FastAPI entrypoint
         run: |
           python - <<'PY'
@@ -43,7 +44,7 @@ jobs:
           m=importlib.util.module_from_spec(s)
           s.loader.exec_module(m)
           names={route.path for route in m.app.routes}
-          assert {"/","/setup","/health","/api/status","/api/account","/api/history","/api/latest","/api/initialize","/api/valuation","/api/run","/api/cron/daily"} <= names
+          assert {"/","/setup","/health","/api/status","/api/account","/api/history","/api/brief","/api/latest","/api/initialize","/api/valuation","/api/run","/api/cron/daily"} <= names
           assert m.app.docs_url is None
           print("PRIVATE_CLOUD_ROUTES_OK")
           PY

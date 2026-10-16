@@ -58,6 +58,10 @@ class DashboardMarkupTests(unittest.TestCase):
             self.assertIn("id", field, field)
         self.assertIn("valuation-date", ids)
         self.assertIn("valuation-note", ids)
+        for required in ["decision-workbench", "decision-headline", "decision-next-step",
+                         "decision-action-tickets", "decision-proof-status", "decision-account-date",
+                         "model-conditions", "model-next", "run-action-headline"]:
+            self.assertIn(required, ids)
         self.assertIn("valuation-confirmed", ids)
 
     def test_navigation_is_complete_not_decorative(self):
@@ -73,7 +77,7 @@ class DashboardMarkupTests(unittest.TestCase):
 
     def test_own_assets_only_and_no_embedded_private_values(self):
         self.assertEqual(self.parser.scripts, ["/assets/app.js"])
-        self.assertEqual(self.parser.links, ["/assets/app.css"])
+        self.assertEqual(self.parser.links, ["/assets/app.css", "/assets/decision.css"])
         self.assertNotIn("https://", self.html)
         self.assertNotIn("INVESTLAB_ADMIN_TOKEN", self.html)
         self.assertNotIn("BLOB_READ_WRITE_TOKEN", self.html)
@@ -87,6 +91,9 @@ class DashboardMarkupTests(unittest.TestCase):
         self.assertIn('api("/api/history")', self.js)
         self.assertIn('apiOptional("/api/latest")', self.js)
         self.assertIn("entriesByDate()", self.js)
+        self.assertIn('api("/api/brief")', self.js)
+        self.assertIn("function renderDecision()", self.js)
+        self.assertIn("if(actionable&&Array.isArray(b.steps))", self.js)
         self.assertIn("rows.length<2", self.js)
         self.assertIn("持仓", self.html)
         self.assertIn("不代表投资收益率", self.html)
@@ -104,6 +111,11 @@ class DashboardMarkupTests(unittest.TestCase):
         self.assertIn('role="alert"', self.html)
         self.assertIn('role="img"', self.html)
         self.assertIn(".empty-chart", self.css)
+        modern=(ROOT / "decision.css").read_text(encoding="utf-8")
+        self.assertIn(".decision-workbench", modern)
+        self.assertIn(".action-ticket", modern)
+        self.assertIn("@media(max-width:640px)", modern)
+        self.assertIn(":focus-visible", self.css)
 
 
 if __name__ == "__main__":

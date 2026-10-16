@@ -8,7 +8,7 @@
     {symbol:"QLD",name:"纳指每日2倍杠杆 ETF",kind:"杠杆 ETF",color:"#b39afd",css:"qld",target:0},
     {symbol:"CASH",name:"人民币现金",kind:"现金",color:"#f0bd7d",css:"cash",target:0}
   ];
-  const state = {account:null,history:[],historyReady:false,status:null,report:null,period:"all",busy:false,mutating:false,initial:true};
+  const state = {account:null,history:[],historyReady:false,status:null,report:null,brief:null,briefError:null,period:"all",busy:false,mutating:false,initial:true};
   const nformat = new Intl.NumberFormat("zh-CN",{maximumFractionDigits:0});
   const dateformat = new Intl.DateTimeFormat("zh-CN",{year:"numeric",month:"long",day:"numeric",timeZone:"Asia/Shanghai"});
   const pages = {overview:"资产总览",portfolio:"投资组合",research:"策略与风险",runs:"运行报告",settings:"账户与设置"};
@@ -52,7 +52,7 @@
     loading(true);
     $("global-error").hidden=true;
     const result=await Promise.allSettled([
-      api("/api/account"),api("/api/status"),api("/api/history"),apiOptional("/api/latest")
+      api("/api/account"),api("/api/status"),api("/api/history"),apiOptional("/api/latest"),api("/api/brief")
     ]);
     if(result[0].status==="fulfilled")state.account=result[0].value;
     else{state.account=null;$("global-error").hidden=false;setText("global-error-detail","账户读取失败："+result[0].reason.message+"。请确认 Vercel 登录仍有效。");}
@@ -60,6 +60,8 @@
     state.historyReady=result[2].status==="fulfilled";
     state.history=state.historyReady&&Array.isArray(result[2].value.history)?result[2].value.history:[];
     state.report=result[3].status==="fulfilled"?result[3].value:null;
+    state.brief=result[4].status==="fulfilled"?result[4].value:null;
+    state.briefError=result[4].status==="rejected"?result[4].reason.message:null;
     if(result[2].status==="rejected"&&state.account)showToast("历史记录暂时读取失败，其他账户信息可以正常查看。",true);
     if(result[1].status==="rejected"&&state.account)showToast("最新监控状态读取失败，请稍后重试。",true);
     render();
@@ -70,16 +72,89 @@
     }
   }
   function render(){
-    renderOverview();renderPortfolio();renderResearch();renderRuns();renderSettings();
+    renderDecision();renderOverview();renderPortfolio();renderResearch();renderRuns();renderSettings();
     for(const b of $$("[data-open-editor]"))b.disabled=!state.account;
     for(const b of $$("[data-open-run]"))b.disabled=!(state.account&&state.account.account_initialized&&state.status&&state.status.storage_verified);
+  }
+  function renderDecision(){
+    const b=state.brief||null;
+    let headline,explanation,next,status="等待证据",verified=false,actionable=false,when="最近报告：尚未运行";
+    if(!b){
+      headline=state.briefError?"当前无法生成可靠结论":"正在等待可信的研究报告";
+      explanation=state.briefError?"结论接口读取失败："+state.briefError+"。技术检查结果不能替代策略复核。":"先保存真实账户并通过在线行情核验，才会提供可解释的人工复核意见。";
+      next=state.briefError?"检查登录和监控报告，再尝试刷新。":"进入运行报告，完成首次在线监控。";
+    }else{
+      headline=b.headline||"暂无可用结论";
+      explanation=b.explanation||"当前还没有足够的信息推导新建议。";
+      next=b.next_step||"检查报告状态。";
+      verified=b.verified_run===true;
+      actionable=b.actionable===true&&b.status==="ACTION_REVIEW";
+      status=actionable?(b.priority==="HOLD"?"维持观察":"可供人工复核"):(verified?"已核验·暂缓建议":"等待验证");
+      when=b.report_created_at?"报告生成："+timeText(b.report_created_at):"尚无合格研究报告";
+    }
+    setText("decision-headline",headline);setText("decision-description",explanation);
+    setText("decision-next-step",next);setText("decision-report-time",when);
+    const badge=$("decision-badge");
+    badge.textContent=status;badge.className="decision-status"+(actionable?"":verified?" is-wait":" is-blocked");
+    setText("decision-proof-status",actionable?"可以复核配置":verified?"检查通过，但不可执行":"尚未达到行动条件");
+    setText("decision-proof-sub",actionable?"报告、行情和当前账户已匹配":"不能把技术 PASS 直接解释为买入或卖出");
+    $("decision-proof-status").parentElement.dataset.verified=String(actionable);
+    setText("decision-session",b&&b.report_session?dateText(b.report_session):"待核验");
+    setText("decision-account-date",state.account&&state.account.account_initialized?dateText(state.account.as_of):"未保存");
+    setText("decision-evidence",verified?"在线核验通过":"待通过");
+    setText("decision-applicable",actionable?"与当前账户一致":b&&b.status==="ACCOUNT_MISMATCH"?"需更新结论":"不生成交易建议");
+    const tickets=$("decision-action-tickets");clear(tickets);
+    if(actionable&&Array.isArray(b.steps)){
+      for(const step of b.steps){
+        if(!["QQQ","TQQQ"].includes(step.symbol))continue;
+        const item=element("div","action-ticket"),body=element("div"),change=element("span","ticket-arrow");
+        body.appendChild(element("strong","",step.symbol+" · "+step.label));
+        const curr=typeof step.current_weight==="number"?percent(step.current_weight*100):"—";
+        const target=typeof step.reference_weight==="number"?percent(step.reference_weight*100):"—";
+        body.appendChild(element("small","",curr+" → 本步 "+target));
+        change.textContent=step.action==="HOLD"?"＝":step.action==="REDUCE_REVIEW"?"↘":"↗";
+        item.appendChild(body);item.appendChild(change);tickets.appendChild(item);
+      }
+    }
+    if(!tickets.childElementCount){
+      const placeholder=element("div","action-ticket ticket-wait");
+      const details=element("div");
+      details.appendChild(element("strong","",verified?"没有获得当前可用的配置意见":"待行情与账户核验"));
+      details.appendChild(element("small","",verified?"本轮暂不输出配置比例":"先验证再判断，不猜测行情。"));
+      placeholder.appendChild(details);tickets.appendChild(placeholder);
+    }
+    renderDecisionEvidence();
+  }
+  function renderDecisionEvidence(){
+    const b=state.brief,valid=b&&b.actionable===true&&b.status==="ACTION_REVIEW";
+    setText("model-gate-label",valid?"有条件可复核":b&&b.verified_run?"技术已通过，意见暂缓":"等待可信证据");
+    $("model-gate-label").className="logic-label"+(valid?"":" blocked");
+    setText("model-reason-title",b?b.headline:"尚未得到完整研究结论");
+    setText("model-reason-explanation",b?b.explanation:"先保存持仓并完成行情核验。");
+    setText("model-next",b?b.next_step:"进入运行报告启动一次可信的在线监控。");
+    const list=$("model-conditions");clear(list);
+    if(valid&&Array.isArray(b.conditions)&&b.conditions.length){
+      for(const cond of b.conditions){
+        const card=element("div","condition-item"+(cond.met?"":" unmet"));
+        card.appendChild(makeIcon(cond.met?"check":"clock"));
+        const description=element("span","",cond.label+" · "+(cond.met?"满足":"未满足"));
+        card.appendChild(description);list.appendChild(card);
+      }
+    }else{
+      const card=element("div","condition-item unmet");
+      card.appendChild(makeIcon("info"));
+      card.appendChild(element("span","","未具备当次可用的市场与账户证据，不推导本步目标比例。"));
+      list.appendChild(card);
+    }
+    setText("run-action-headline",b?b.headline:"等待研究报告");
+    setText("run-action-explanation",b?b.explanation+" 下一步："+b.next_step:"运行检查通过后，还需核对当前账户、行情日期及策略门槛。");
   }
   function readiness(){
     const a=state.account,s=state.status;
     if(!a)return {kind:"danger",heading:"账户读取失败",copy:"无法从私有存储读取账户，请重新登录并刷新。"};
     if(!a.account_initialized)return {kind:"info",heading:"还没有保存真实账户",copy:"先在「账户与设置」中确认人民币估值，才能开始行情核验。"};
     if(!s||s.storage_verified!==true)return {kind:"danger",heading:"存储或监控状态未通过检查",copy:"账户存在，但尚未确认本次存储读写检查是否成功。"};
-    if(s.status==="SUCCEEDED"&&s.qualified_online===true)return {kind:"ready",heading:"最近一次监控已验证",copy:"在线行情和独立检查通过。可在运行报告中阅读结果，操作仍需手动确认。"};
+    if(s.status==="SUCCEEDED"&&s.qualified_online===true)return {kind:state.brief&&state.brief.actionable?"ready":"info",heading:state.brief&&state.brief.actionable?"行情与策略结论已核对":"技术核验通过，策略仍需复核",copy:state.brief&&state.brief.headline?state.brief.headline:"技术 PASS 不代表立即调仓，先查看报告时点和账户一致性。"};
     if(s.status==="FAILED"||s.status==="STORAGE_ERROR"||s.status==="STATE_INCONSISTENT")return {kind:"danger",heading:"最近一次监控尚未通过",copy:"请到运行报告查看失败状态。本页面不会把未经验证的数据标记为成功。"};
     return {kind:"info",heading:"账户已就绪，等待首次行情核验",copy:"持仓已保存并可读取；运行一次真实监控后才会出现可信的分析报告。"};
   }
@@ -246,11 +321,23 @@
       for(const [name,color] of [["上：当前占比","#92aaff"],["下：策略目标","#6cbeac"]]){const node=element("span");const dot=element("i","legend-color");dot.style.background=color;node.appendChild(dot);node.appendChild(document.createTextNode(name));key.appendChild(node);}box.appendChild(key);
     }
     const risk=$("risk-report");clear(risk);
-    const report=state.report&&reportQuality()?state.report:null;
+    const trusted=state.brief&&state.brief.actionable===true&&state.brief.status==="ACTION_REVIEW"&&reportQuality();
+    const metrics=trusted&&state.brief.metrics?state.brief.metrics:{};
+    const actualExposure=v&&sum>0?
+      100*(number(v.QQQ)+3*number(v.TQQQ)+2*number(v.QLD))/sum:null;
+    const verifiedVol=typeof metrics.qqq_vol20_pct==="number"?
+      percent(metrics.qqq_vol20_pct):"等待有效模型报告";
+    const modelVol=typeof metrics.risk_annual_volatility==="number"?
+      percent(metrics.risk_annual_volatility*100):"等待有效模型报告";
+    const riskShare=typeof metrics.risk_tqqq_variance_share==="number"?
+      percent(metrics.risk_tqqq_variance_share*100):"等待有效模型报告";
     const rows=[
-      {label:"策略目标股票敞口",value:"参考 180%",detail:"60% QQQ + 40% TQQQ 的每日目标名义杠杆，非当前真实敞口"},
-      {label:"模型估计年化波动率",value:report&&Number.isFinite(Number(report.risk&&report.risk.annual_volatility))&&report.risk.annual_volatility!=null?percent(Number(report.risk.annual_volatility)*100):"等待行情验证",detail:"模型估计值，不代表未来一定发生"},
-      {label:"TQQQ 方差风险贡献",value:report&&Number.isFinite(Number(report.risk&&report.risk.tqqq_variance_share))&&report.risk.tqqq_variance_share!=null?percent(Number(report.risk.tqqq_variance_share)*100):"等待行情验证",detail:"仅供组合研究；需验证的行情报告"}
+      {label:"当前名义纳指敞口",value:actualExposure!==null?percent(actualExposure):"—",
+       detail:"按已确认 QQQ×1 + QLD×2 + TQQQ×3 的当日倍数粗算，不是实际收益率"},
+      {label:"60/40 目标参考敞口",value:"180%",detail:"这是战略目标的每日名义敞口，不代表你现在的持仓"},
+      {label:"QQQ 20 日年化波动",value:verifiedVol,detail:"来自本轮有效策略复核；行情不合格时不展示旧数值"},
+      {label:"目标组合估计年化波动",value:modelVol,detail:"基于历史行情的模型估计，不预测未来收益"},
+      {label:"TQQQ 对目标组合的方差风险贡献",value:riskShare,detail:"参考模型风险贡献；不等于当前账户的真实风险占比"}
     ];
     for(const row of rows){const div=element("div","risk-metric");div.appendChild(element("span","",row.label));div.appendChild(element("strong","",row.value));div.appendChild(element("small","",row.detail));risk.appendChild(div);}
   }

@@ -128,6 +128,9 @@ class CloudWebSecurityTests(unittest.TestCase):
         self.assertIn('"/api/initialize"',js.text)
         self.assertIn('"/api/valuation"',js.text)
         self.assertIn('"/api/run"',js.text)
+        self.assertIn('"/api/brief"',js.text)
+        self.assertIn("decision-workbench",page.text)
+        self.assertEqual(self.client.get("/assets/decision.css").status_code,200)
         self.assertIn("account_initialized",js.text)
         self.assertIn("min-width",css.text)
         self.assertNotIn('Admin-Token',js.text)
@@ -288,6 +291,44 @@ class CloudWebSecurityTests(unittest.TestCase):
             response=self.client.post("/api/run",json=request,headers={"Origin":"https://testserver"})
         self.assertEqual(response.status_code,409)
         run.assert_not_awaited()
+
+    def test_private_brief_requires_blob_not_public_data(self):
+        with patch.dict(os.environ,{"BLOB_READ_WRITE_TOKEN":""}):
+            response=self.client.get("/api/brief")
+        self.assertEqual(response.status_code,503)
+
+    def test_private_brief_requires_run_research_and_verified_account(self):
+        account={"account_initialized":True,"as_of":"2026-10-14",
+                 "values":{"QQQ":"6000","TQQQ":"0","QLD":"0","CASH":"4000"}}
+        with (patch.dict(os.environ,{"BLOB_READ_WRITE_TOKEN":"present"}),
+              patch("investlab.cloud.read_private_account",
+                    new=AsyncMock(return_value=account)) as read,
+              patch("investlab.cloud.latest_json",
+                    new=AsyncMock(return_value=None)) as latest,
+              patch("investlab.cloud.load_private_home",
+                    new=AsyncMock(return_value=True)) as restore,
+              patch.object(module.service,"latest",return_value=None) as review):
+            response=self.client.get("/api/brief")
+        self.assertEqual(response.status_code,200,response.text)
+        body=response.json()
+        self.assertEqual(body["status"],"NEEDS_VERIFIED_RUN")
+        self.assertFalse(body["actionable"])
+        self.assertFalse(body["trading_enabled"])
+        self.assertEqual(body["steps"],[])
+        read.assert_awaited_once()
+        latest.assert_awaited_once_with("runs")
+        restore.assert_awaited_once()
+        review.assert_called_once()
+
+    def test_private_brief_inaccessible_when_storage_raises(self):
+        with (patch.dict(os.environ,{"BLOB_READ_WRITE_TOKEN":"present"}),
+              patch("investlab.cloud.read_private_account",
+                    new=AsyncMock(side_effect=RuntimeError("secret credential must not be exposed")))):
+            response=self.client.get("/api/brief")
+        self.assertEqual(response.status_code,503)
+        self.assertEqual(response.json()["status"],"BRIEF_READ_ERROR")
+        self.assertFalse(response.json()["actionable"])
+        self.assertNotIn("secret credential",response.text)
 
     def test_docs_disabled_and_cloud_is_vaulted(self):
         self.assertEqual(self.client.get("/docs").status_code,404)

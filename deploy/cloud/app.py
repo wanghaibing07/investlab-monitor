@@ -145,6 +145,36 @@ async def latest():
 
 
 
+@app.get("/api/brief")
+async def investment_brief():
+    """Private, evidence-backed manual review; never a trading endpoint.
+
+    The current confirmed account, latest persisted run receipt, and saved
+    research review must agree before any portfolio guidance is returned.
+    """
+    from investlab.brief import decision_brief
+    if not _configured():
+        raise HTTPException(503, "Private storage unavailable")
+    try:
+        account = await cloud.read_private_account()
+        latest_run = await cloud.latest_json("runs")
+        review = None
+        if account.get("account_initialized") is True:
+            with tempfile.TemporaryDirectory(prefix="investlab-brief-") as tmp:
+                private = Path(tmp) / "private"
+                if not await cloud.load_private_home(private):
+                    raise RuntimeError("Private account disappeared while loading")
+                review = service.latest(private)
+        return decision_brief(account, latest_run, review)
+    except Exception as exc:
+        return JSONResponse({
+            "status": "BRIEF_READ_ERROR",
+            "actionable": False,
+            "trading_enabled": False,
+            "failure_type": type(exc).__name__,
+        }, status_code=503)
+
+
 @app.get("/api/account")
 async def private_account():
     """Read current confirmed valuation; protected by Vercel Authentication."""
