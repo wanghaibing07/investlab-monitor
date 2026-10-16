@@ -123,7 +123,7 @@ class DashboardMarkupTests(unittest.TestCase):
         self.assertNotIn("Math.random", self.js)
         self.assertNotIn("localStorage", self.js)
         self.assertIn(".decision-allocation-row", self.css + (ROOT / "decision.css").read_text(encoding="utf-8"))
-        self.assertIn("不自动下单", self.html)
+        self.assertIn("不自动交易", self.html)
 
     def test_responsive_accessible_states_exist(self):
         self.assertIn("@media(max-width:880px)", self.css)
