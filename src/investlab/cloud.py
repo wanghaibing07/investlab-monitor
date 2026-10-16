@@ -196,6 +196,75 @@ async def verify_private_valuation(values, as_of):
         }
 
 
+
+async def read_private_account():
+    """Read the most recent immutable Blob state and confirmed CNY baseline.
+
+    Never infer an account from the existence of run reports.
+    """
+    from investlab.core import connection
+    with tempfile.TemporaryDirectory(prefix="investlab-account-get-") as temp:
+        home = Path(temp) / "private"
+        objects = await _list("state/")
+        names = sorted(item.pathname for item in objects if item.pathname.endswith(".zip"))
+        if not names:
+            return {"account_initialized": False, "state_version": None}
+        raw = await _read(names[-1])
+        _restore_archive(home, raw)
+        await asyncio.to_thread(_check_account, home)
+        with connection(home, readonly=True) as db:
+            row = db.execute(
+                "SELECT as_of, qqq_value_cny, tqqq_value_cny, "
+                "qld_value_cny, cash_cny, note, recorded_at "
+                "FROM portfolio_baselines ORDER BY rowid DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("Confirmed account baseline missing")
+        values = {symbol: str(row[column]) for symbol, column in (
+            ("QQQ", "qqq_value_cny"), ("TQQQ", "tqqq_value_cny"),
+            ("QLD", "qld_value_cny"), ("CASH", "cash_cny")
+        )}
+        return {
+            "account_initialized": True, "as_of": row["as_of"], "values": values,
+            "total_value_cny": sum(int(v) for v in values.values()),
+            "state_version": names[-1], "recorded_at": row["recorded_at"],
+            "note": row["note"], "trading_enabled": False,
+        }
+
+
+async def append_private_valuation(values, as_of, note, expected_version):
+    """Append a confirmed valuation without overwriting any historical snapshot.
+
+    A stale submitted version is rejected. This optimistic check is NOT a
+    distributed mutex: enable recurring writers only after transaction locking.
+    """
+    from investlab import ledger
+    with tempfile.TemporaryDirectory(prefix="investlab-account-update-") as temp:
+        home = Path(temp) / "private"
+        objects = await _list("state/")
+        names = sorted(item.pathname for item in objects if item.pathname.endswith(".zip"))
+        if not names:
+            raise ValueError("Account has not been initialized")
+        if names[-1] != expected_version:
+            raise ValueError("Private account changed; reload before resubmitting")
+        raw = await _read(names[-1])
+        _restore_archive(home, raw)
+        await asyncio.to_thread(_check_account, home)
+        event = {
+            "valuation_id": uuid.uuid4().hex,
+            "account": "default", "as_of": as_of, "currency": "CNY",
+            "values": values, "confirmed": True, "note": note,
+        }
+        await asyncio.to_thread(ledger.valuation, home, event)
+        # Detect intervening updates; Blob cannot provide atomic CAS or a mutex.
+        before_write = await _list("state/")
+        latest = max((o.pathname for o in before_write if o.pathname.endswith(".zip")), default=None)
+        if latest != expected_version:
+            raise ValueError("Private account changed during update; reload and reconcile")
+        saved = await save_private_home(home)
+        return saved
+
+
 async def save_private_home(home):
     archive = await asyncio.to_thread(_make_archive, home)
     return await _write("state", archive, "zip")

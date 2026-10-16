@@ -71,9 +71,9 @@ article{border:1px solid #33475e;border-radius:16px;padding:26px;background:#192
 p{color:#b9cee1}code{background:#24384d;padding:3px 7px;border-radius:5px}
 a{color:#8ed2ed}h1{font-size:30px}small{color:#98afc4}</style></head><body>
 <article><h1>InvestLab · 私有云端</h1><p>这里与公开的虚构演示完全隔离。Vercel 身份登录负责保护访问。</p>
-<p><strong>云端存储已预留；真实账户不会自动导入。</strong> 首次录入需再次通过管理令牌确认。
+<p><strong>云端存储已预留；真实账户不会自动导入。</strong> 首次录入后可长期更新账户估值，不需要额外管理令牌。
 运行结果只在数据质量与独立验证通过后标记成功。</p>
-<p><a href="/setup">初始化真实账户（需要管理令牌）</a></p>
+<p><a href="/setup">管理真实账户（Vercel 登录）</a></p>
 <p>接口：<a href="/health">运行健康</a> · <a href="/api/status">私有运行状态</a> ·
 <a href="/api/latest">最新私有报告</a></p>
 <small>默认无自动下单 · 不会读取 ChatGPT 插件凭据 · 不使用公开 Blob 存储</small></article>
@@ -86,28 +86,26 @@ async def setup_page():
     """Browser-only setup form: never embed any secret or private holdings in source."""
     return """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>InvestLab · 初始化私有账户</title>
+<title>InvestLab · 私有账户管理</title>
 <style>body{background:#101a29;color:#edf3f9;max-width:640px;margin:4vh auto;padding:0 20px;font:16px/1.65 system-ui}
 main{background:#19283a;border:1px solid #33475e;border-radius:15px;padding:24px}
 label{display:block;margin:14px 0 4px}input{box-sizing:border-box;width:100%;padding:11px;border:1px solid #576a80;border-radius:8px;background:#fff;color:#111}
 button{display:block;margin-top:20px;width:100%;padding:14px;background:#80d4cb;border:0;border-radius:9px;font-size:17px;font-weight:700;cursor:pointer}
 button:disabled{opacity:.55}p{color:#b9cee1}a{color:#8ed2ed}#result{white-space:pre-wrap;overflow-wrap:anywhere}
 .small{font-size:13px;color:#bdd0e2}.check{display:flex;align-items:center;gap:9px}.check input{width:auto}</style></head><body><main>
-<h1>初始化私有账户</h1>
-<p>请从券商账户核对这一天的人民币估值。这里只记录已确认的估值，不创建交易，不自动下单。</p>
-<p id="current">正在检查是否已存在账户…</p>
-<form id="setup-form" autocomplete="off">
+<h1>长期账户管理</h1>
+<p>登录一次后可长期保存并更新真实估值。历史估值保留，不创建交易，不自动下单。</p>
+<p id="current">正在读取账户…</p>\n<pre id="account-summary" role="status"></pre>
+<form id="account-form" autocomplete="off">
 <label for="day">估值日期</label><input id="day" type="date" required>
 <label for="qqq">QQQ 人民币估值（整数元）</label><input id="qqq" type="number" min="0" max="999999999999" step="1" required>
 <label for="tqqq">TQQQ 人民币估值（整数元）</label><input id="tqqq" type="number" min="0" max="999999999999" step="1" required>
 <label for="qld">QLD 人民币估值（整数元）</label><input id="qld" type="number" min="0" max="999999999999" step="1" required>
 <label for="cash">现金人民币估值（整数元）</label><input id="cash" type="number" min="0" max="999999999999" step="1" required>
 <label for="note">估值来源说明（5 至 160 字）</label><input id="note" maxlength="160" minlength="5" required placeholder="持有人根据账户明细确认估值">
-<label for="token">管理令牌（INVESTLAB_ADMIN_TOKEN）</label>
-<input id="token" type="password" required autocomplete="off" spellcheck="false">
-<p class="small">令牌仅随此网页的 HTTPS 初始化请求发送，不写入报告、浏览器本地存储或网页地址。请从 Vercel 项目私有环境变量中获取，不要发到聊天中。</p>
-<label class="check"><input id="confirmed" type="checkbox" required>我已核实以上金额及日期，确认一次性创建真实账户</label>
-<button id="submit" type="submit" disabled>核对并初始化</button></form>
+<p class="small">只需登录有权限的 Vercel 私有项目；不使用第二个管理令牌。请不要共享受保护部署的访问链接。</p>
+<label class="check"><input id="confirmed" type="checkbox" required>我已核实以上金额及日期，确认保存本次账户估值</label>
+<button id="submit" type="submit" disabled>保存账户估值</button></form>
 <pre id="result" role="status" aria-live="polite"></pre>
 <p><a href="/api/status">查看私有账户状态</a> · <a href="/">返回首页</a></p>
 </main><script src="/setup.js" defer></script></body></html>"""
@@ -117,76 +115,100 @@ _SETUP_JS = r"""
 "use strict";
 const $ = id => document.getElementById(id);
 const status = $("current"), output = $("result"), button = $("submit");
-let initialized = false;
-async function refresh() {
-  const r = await fetch("/api/status", {cache:"no-store", credentials:"same-origin"});
-  const x = await r.json();
-  initialized = x.account_initialized === true || x.latest_run_exists === true;
-  button.disabled = initialized || x.status !== "SETUP_REQUIRED" || x.storage_verified !== true;
-  status.textContent = initialized ? "已存在确认账户，禁止重复初始化。" :
-    x.status === "SETUP_REQUIRED" && x.storage_verified === true ?
-      "云端已确认暂无账户快照，可以初始化。" :
-      "存储状态未通过检查：" + x.status + "。暂不允许写入。";
-  return x;
+const fields = ["QQQ","TQQQ","QLD","CASH"];
+let initialized = false, stateVersion = null, storageVerified = false;
+async function getJSON(path) {
+  const r = await fetch(path,{cache:"no-store",credentials:"same-origin"});
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.status || "HTTP " + r.status);
+  return data;
 }
-refresh().catch(() => { status.textContent="无法检查云端账户状态，写入已阻止。"; });
-$("setup-form").addEventListener("submit", async function (event) {
-  event.preventDefault();
-  if (button.disabled || initialized) return;
-  const raw = {};
-  for (const key of ["qqq","tqqq","qld","cash"]) {
-    const value = $(key).value;
-    if (!/^(0|[1-9][0-9]{0,11})$/.test(value)) {
-      output.textContent="请输入每项非负整数人民币金额。"; return;
-    }
-    raw[key.toUpperCase()] = value;
-  }
-  if (Object.values(raw).reduce((a,b)=>a+Number(b),0) <= 0) {
-    output.textContent="资产总额必须大于零。"; return;
-  }
-  if (!$("confirmed").checked) {
-    output.textContent="请先确认估值与日期。"; return;
-  }
-  const token = $("token").value;
-  const payload = {
-    as_of:$("day").value, values:raw, note:$("note").value, confirmed:true
-  };
-  if (!token || !payload.as_of || payload.note.length<5) return;
+async function refresh() {
   button.disabled = true;
-  output.textContent="正在安全写入，并重新读取私有 Blob 与 SQLite 核验…";
+  const state = await getJSON("/api/status");
+  if (state.storage_verified !== true) throw new Error("Private storage not verified");
+  storageVerified = true;
+  const account = await getJSON("/api/account");
+  initialized = account.account_initialized === true;
+  stateVersion = initialized ? account.state_version : null;
+  status.textContent = initialized ? "账户已保存，可以填写新的估值日期和金额继续更新。" :
+    "私有存储可读，尚未创建账户。请填写第一份估值。";
+  if (initialized) {
+    $("account-summary").textContent = "已存估值 " + account.as_of +
+      "｜QQQ ¥" + account.values.QQQ + "｜TQQQ ¥" + account.values.TQQQ +
+      "｜QLD ¥" + account.values.QLD + "｜现金 ¥" + account.values.CASH +
+      "｜合计 ¥" + account.total_value_cny;
+    $("day").value = account.as_of;
+    for (const key of fields) $(key.toLowerCase()).value = account.values[key];
+    $("note").value = "";
+    $("note").placeholder = "填写本次估值来源或更正原因";
+  } else {
+    $("account-summary").textContent = "暂未保存真实资产。";
+  }
+  button.textContent = initialized ? "保存新估值（保留历史）" : "创建并保存账户";
+  button.disabled = !storageVerified;
+  return account;
+}
+refresh().catch(e => {button.disabled=true; status.textContent="账户读取失败，已阻止写入：" + e.message;});
+$("account-form").addEventListener("submit", async function(event) {
+  event.preventDefault();
+  if (button.disabled || !storageVerified) return;
+  const values = {};
+  for (const key of fields) {
+    const value = $(key.toLowerCase()).value;
+    if (!/^(0|[1-9][0-9]{0,11})$/.test(value)) {
+      output.textContent="请输入非负整数人民币金额。";return;
+    }
+    values[key] = value;
+  }
+  if (fields.reduce((sum,key)=>sum+Number(values[key]),0)<=0) {
+    output.textContent="合计必须大于零。";return;
+  }
+  if (!$("confirmed").checked) { output.textContent="请先确认日期和金额。"; return; }
+  const body = {as_of:$("day").value,values,note:$("note").value,confirmed:true};
+  if (initialized) body.expected_state_version = stateVersion;
+  if (!body.as_of || body.note.length<5 || body.note.length>160) {
+    output.textContent="请填写日期和至少5字的估值来源。";return;
+  }
+  button.disabled = true;
+  output.textContent="正在保存不可覆盖的历史快照，并从私有存储重新读取核对…";
   try {
-    const res = await fetch("/api/initialize", {
-      method:"POST", credentials:"same-origin", cache:"no-store",
-      headers:{"Content-Type":"application/json", "X-Investlab-Admin-Token":token},
-      body:JSON.stringify(payload)
+    const res = await fetch(initialized ? "/api/valuation" : "/api/initialize", {
+      method:"POST",credentials:"same-origin",cache:"no-store",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(body)
     });
-    $("token").value="";
     const data = await res.json();
-    if (!res.ok || data.status !== "INITIALIZED" || data.readback?.verified !== true) {
-      output.textContent="初始化未验收成功。HTTP "+res.status+"；"+(data.detail||data.status||"未知错误")+
-        "。请先刷新账户状态，勿重复提交。"; await refresh(); return;
+    if (!res.ok || !["INITIALIZED","UPDATED"].includes(data.status) ||
+        data.readback?.verified !== true) {
+      output.textContent="本次保存未验收。HTTP " + res.status+"；"+
+        (data.detail||data.status||"未知原因")+"。请先查看账户当前状态，不要反复提交。";
+      try { await refresh(); } catch(_) {} return;
     }
-    const check = data.readback;
-    if (check.as_of !== payload.as_of || Object.keys(raw).some(k=>check.values[k]!==raw[k])) {
-      output.textContent="写入返回数据与确认估值不一致，禁止继续。";return;
+    const receipt=data.readback;
+    if (receipt.as_of !== body.as_of ||
+        fields.some(key=>receipt.values[key]!==values[key])) {
+      output.textContent="回读值与输入不一致；请人工核实。";return;
     }
-    const fresh = await refresh();
-    if (fresh.account_initialized !== true || fresh.storage_verified !== true) {
-      output.textContent="写入已返回成功，但独立状态读取未确认；请人工检查。";return;
+    const checked=await getJSON("/api/account");
+    if (checked.state_version!==data.state_version ||
+        checked.as_of!==body.as_of ||
+        fields.some(key=>checked.values[key]!==values[key])) {
+      output.textContent="独立状态读取不一致。请核实账户，勿再次提交。";return;
     }
-    output.textContent="持久化验证成功：\n日期 "+check.as_of+
-      "\nQQQ ¥"+check.values.QQQ+"，TQQQ ¥"+check.values.TQQQ+
-      "，QLD ¥"+check.values.QLD+"，现金 ¥"+check.values.CASH+
-      "\n合计 ¥"+check.total_value_cny+
-      "\n未创建任何交易；每日自动监控尚未启用。";
-  } catch (_) {
-    $("token").value="";
-    output.textContent="请求或回读失败，请先打开 /api/status 查状态，勿直接重试。";
-    try { await refresh(); } catch (_) {}
-  } finally { $("token").value=""; }
+    output.textContent="已持久化并回读验证｜"+receipt.as_of+
+      "｜QQQ ¥"+receipt.values.QQQ+"｜TQQQ ¥"+receipt.values.TQQQ+
+      "｜QLD ¥"+receipt.values.QLD+"｜现金 ¥"+receipt.values.CASH+
+      "｜合计 ¥"+receipt.total_value_cny+
+      "\n仅保存估值；未创建交易；自动交易始终关闭。";
+    $("confirmed").checked=false;
+    await refresh();
+  } catch (error) {
+    output.textContent="网络或读取错误："+error.message+"。请检查 /api/account，勿直接重试。";
+    try {await refresh();}catch(_){}
+  }
 });
 """
-
 @app.get("/setup.js", response_class=PlainTextResponse)
 async def setup_script():
     return PlainTextResponse(_SETUP_JS, media_type="text/javascript", headers={
@@ -265,21 +287,40 @@ async def latest():
             return JSONResponse({"status":"READ_ERROR", "error_type":type(exc).__name__},status_code=503)
 
 
-@app.post("/api/initialize")
-async def initialize(request: Request):
-    _private_origin(request)
-    _require_secret(request.headers.get("x-investlab-admin-token"), "INVESTLAB_ADMIN_TOKEN")
+
+@app.get("/api/account")
+async def private_account():
+    """Read current confirmed valuation; protected by Vercel Authentication."""
     if not _configured():
-        raise HTTPException(503,"Private Blob storage unavailable")
+        raise HTTPException(503, "Private Blob storage unavailable")
+    try:
+        return await cloud.read_private_account()
+    except Exception as exc:
+        return JSONResponse({"status":"STORAGE_ERROR",
+                             "error_type":type(exc).__name__},status_code=503)
+
+
+async def _confirmed_valuation(request: Request, *, update=False):
+    # Vercel Authentication protects all project routes, including write APIs.
+    # An additional user-entered administrator secret is deliberately not used.
+    _private_origin(request)
+    if not _configured():
+        raise HTTPException(503, "Private Blob storage unavailable")
     if int(request.headers.get("content-length", "0")) > 8192:
         raise HTTPException(413, "Maximum request size exceeded")
     try:
-        data = await request.json()
-        if not isinstance(data,dict) or set(data) != {"as_of","values","note","confirmed"}:
-            raise ValueError("Unexpected account fields")
+        raw = await request.body()
+        if len(raw) > 8192:
+            raise HTTPException(413, "Maximum request size exceeded")
+        data = json.loads(raw)
+        expected = {"as_of", "values", "note", "confirmed"}
+        if update:
+            expected.add("expected_state_version")
+        if not isinstance(data,dict) or set(data) != expected:
+            raise ValueError("Unexpected valuation fields")
         if data["confirmed"] is not True:
             raise ValueError("Explicit confirmed valuation required")
-        if not isinstance(data["as_of"],str) or date.fromisoformat(data["as_of"])>date.today():
+        if not isinstance(data["as_of"],str) or date.fromisoformat(data["as_of"]) > date.today():
             raise ValueError("Account valuation date is invalid")
         if not isinstance(data["note"],str) or not 5 <= len(data["note"]) <= 160:
             raise ValueError("Provide valuation source note")
@@ -290,15 +331,53 @@ async def initialize(request: Request):
             raise ValueError("CNY valuations must be nonnegative integer strings")
         if sum(int(v) for v in values.values())<=0:
             raise ValueError("Total portfolio valuation must be positive")
-        version = await cloud.initialize_private_account(values,data["as_of"],data["note"])
-        readback = await cloud.verify_private_valuation(values, data["as_of"])
-        return {"status":"INITIALIZED", "state_version":version,
-                "readback":readback,
-                "order_sent":False, "next_step":"Independent online quote verification"}
-    except ValueError as exc:
+        if update:
+            version = data["expected_state_version"]
+            if not isinstance(version,str) or not re.fullmatch(
+                r"state/[0-9]{8}T[0-9]{12}Z-[0-9a-f]{32}\.zip", version
+            ):
+                raise ValueError("Missing or invalid previous account state version")
+        return data
+    except HTTPException:
+        raise
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
         raise HTTPException(422,str(exc)) from None
+
+
+@app.post("/api/initialize")
+async def initialize(request: Request):
+    data = await _confirmed_valuation(request)
+    try:
+        version = await cloud.initialize_private_account(
+            data["values"], data["as_of"], data["note"]
+        )
+        readback = await cloud.verify_private_valuation(data["values"],data["as_of"])
+        return {"status":"INITIALIZED", "state_version":version,
+                "readback":readback,"order_sent":False,
+                "next_step":"Independent online quote verification"}
+    except ValueError as exc:
+        raise HTTPException(409,str(exc)) from None
     except Exception as exc:
         raise HTTPException(503, "Initialization unavailable: "+type(exc).__name__) from None
+
+
+@app.post("/api/valuation")
+async def append_valuation(request: Request):
+    data = await _confirmed_valuation(request,update=True)
+    try:
+        version = await cloud.append_private_valuation(
+            data["values"],data["as_of"],data["note"],
+            data["expected_state_version"]
+        )
+        readback = await cloud.verify_private_valuation(data["values"],data["as_of"])
+        return {"status":"UPDATED","state_version":version,
+                "readback":readback,"order_sent":False,
+                "next_step":"Daily verification pending"}
+    except ValueError as exc:
+        # Missing/stale state, or out-of-order dated valuation.
+        raise HTTPException(409,str(exc)) from None
+    except Exception as exc:
+        raise HTTPException(503, "Valuation update unavailable: "+type(exc).__name__) from None
 
 
 @app.get("/api/cron/daily")

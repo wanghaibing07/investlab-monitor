@@ -34,15 +34,17 @@ class CloudWebSecurityTests(unittest.TestCase):
                     "Authorization":"Bearer wrong-token"}).status_code,401)
                 invoked.assert_not_called()
 
-    def test_initialize_requires_origin_and_admin_secret(self):
+    def test_write_requires_same_origin_not_admin_token(self):
         body={"as_of":"2026-10-14","values":{"QQQ":"6000","TQQQ":"0",
                "QLD":"0","CASH":"4000"},"note":"confirmed sample","confirmed":True}
-        with patch.dict(os.environ,{"INVESTLAB_ADMIN_TOKEN":"z"*48,
-                                   "BLOB_READ_WRITE_TOKEN":"test-blob-token"}):
+        with patch.dict(os.environ,{"BLOB_READ_WRITE_TOKEN":"test-blob-token"}):
             with patch("investlab.cloud.initialize_private_account") as invoked:
                 self.assertEqual(self.client.post("/api/initialize",json=body).status_code,403)
-                headers={"origin":"https://testserver","x-investlab-admin-token":"wrong"}
-                self.assertEqual(self.client.post("/api/initialize",json=body,headers=headers).status_code,401)
+                self.assertEqual(self.client.post("/api/initialize",json=body,headers={
+                    "origin":"https://other-domain.example"}).status_code,403)
+                self.assertEqual(self.client.post("/api/initialize",json=body,headers={
+                    "origin":"https://testserver",
+                    "sec-fetch-site":"cross-site"}).status_code,403)
                 invoked.assert_not_called()
 
     def test_no_report_verifies_actual_account_absent(self):
@@ -99,62 +101,121 @@ class CloudWebSecurityTests(unittest.TestCase):
         self.assertNotIn("token", response.text)
         latest.assert_not_awaited()
 
-    def test_setup_page_is_non_sensitive_and_js_is_same_origin(self):
+    def test_setup_form_has_no_admin_token_and_supports_updates(self):
         page=self.client.get("/setup")
         self.assertEqual(page.status_code,200)
-        self.assertIn('id="token"',page.text)
-        self.assertIn('type="password"',page.text)
-        self.assertIn('/setup.js',page.text)
+        self.assertNotIn('id="token"',page.text)
+        self.assertNotIn('INVESTLAB_ADMIN_TOKEN',page.text)
+        self.assertNotIn('type="password"',page.text)
         self.assertNotIn('91234',page.text)
-        self.assertNotIn('56789',page.text)
+        self.assertIn('/setup.js',page.text)
         script=self.client.get("/setup.js")
         self.assertEqual(script.status_code,200)
         self.assertIn('"/api/initialize"',script.text)
-        self.assertIn('X-Investlab-Admin-Token',script.text)
+        self.assertIn('"/api/valuation"',script.text)
+        self.assertIn('"/api/account"',script.text)
+        self.assertNotIn('Admin-Token',script.text)
         self.assertIn('script-src',page.headers["content-security-policy"])
         self.assertIn('connect-src',script.headers["content-security-policy"])
 
-    def test_authorized_init_returns_verified_persisted_cny_receipt(self):
+    def test_initialization_requires_no_secret_and_verifies_readback(self):
         payload={"as_of":"2026-10-16",
                  "values":{"QQQ":"5700","TQQQ":"0","QLD":"0","CASH":"2300"},
-                 "note":"Account owner confirmed 2026-10-16 valuation",
+                 "note":"Confirmed owner valuation from broker",
                  "confirmed":True}
-        readback={"verified":True,"as_of":"2026-10-16",
+        readback={"verified":True,"as_of":payload["as_of"],
                   "values":payload["values"],"total_value_cny":8000}
-        with (patch.dict(os.environ,{"INVESTLAB_ADMIN_TOKEN":"Z"*48,
-                                    "BLOB_READ_WRITE_TOKEN":"set"}),
+        with (patch.dict(os.environ,{"BLOB_READ_WRITE_TOKEN":"set"}),
               patch("investlab.cloud.initialize_private_account",
                     new=AsyncMock(return_value="state/validated.zip")) as save,
               patch("investlab.cloud.verify_private_valuation",
                     new=AsyncMock(return_value=readback)) as verify):
-            response=self.client.post("/api/initialize",json=payload,headers={
-                "Origin":"https://testserver",
-                "X-Investlab-Admin-Token":"Z"*48
-            })
+            response=self.client.post("/api/initialize",json=payload,
+                   headers={"Origin":"https://testserver"})
         self.assertEqual(response.status_code,200,response.text)
         self.assertEqual(response.json()["status"],"INITIALIZED")
         self.assertEqual(response.json()["readback"],readback)
         self.assertFalse(response.json()["order_sent"])
-        save.assert_awaited_once_with(payload["values"],"2026-10-16",payload["note"])
-        verify.assert_awaited_once_with(payload["values"],"2026-10-16")
+        save.assert_awaited_once_with(payload["values"],payload["as_of"],payload["note"])
+        verify.assert_awaited_once_with(payload["values"],payload["as_of"])
 
-    def test_failed_readback_is_not_claimed_as_success(self):
+    def test_failed_readback_never_claims_initialized(self):
         payload={"as_of":"2026-10-16",
                  "values":{"QQQ":"5700","TQQQ":"0","QLD":"0","CASH":"2300"},
                  "note":"Owner confirmed CNY values","confirmed":True}
-        with (patch.dict(os.environ,{"INVESTLAB_ADMIN_TOKEN":"Z"*48,
-                                    "BLOB_READ_WRITE_TOKEN":"set"}),
+        with (patch.dict(os.environ,{"BLOB_READ_WRITE_TOKEN":"set"}),
               patch("investlab.cloud.initialize_private_account",
                     new=AsyncMock(return_value="state/validated.zip")),
               patch("investlab.cloud.verify_private_valuation",
-                    new=AsyncMock(side_effect=RuntimeError("Mismatch: private secret")))):
-            response=self.client.post("/api/initialize",json=payload,headers={
-                "Origin":"https://testserver",
-                "X-Investlab-Admin-Token":"Z"*48
-            })
+                    new=AsyncMock(side_effect=RuntimeError("private secret leaked")))):
+            response=self.client.post("/api/initialize",json=payload,
+                   headers={"Origin":"https://testserver"})
         self.assertEqual(response.status_code,503)
         self.assertNotIn("private secret",response.text)
         self.assertNotIn("INITIALIZED",response.text)
+
+    def test_account_read_returns_current_snapshot(self):
+        record={"account_initialized":True, "as_of":"2026-10-14",
+                "values":{"QQQ":"6000","TQQQ":"0","QLD":"0","CASH":"4000"},
+                "state_version":"state/test.zip","trading_enabled":False}
+        with (patch.dict(os.environ,{"BLOB_READ_WRITE_TOKEN":"configured"}),
+              patch("investlab.cloud.read_private_account",
+                    new=AsyncMock(return_value=record)) as read):
+            result=self.client.get("/api/account")
+        self.assertEqual(result.status_code,200)
+        self.assertEqual(result.json()["values"],record["values"])
+        read.assert_awaited_once()
+
+    def test_update_account_requires_version_and_checks_readback(self):
+        version="state/20261016T120000000000Z-"+"a"*32+".zip"
+        payload={"as_of":"2026-10-16",
+                 "values":{"QQQ":"6500","TQQQ":"0","QLD":"0","CASH":"3500"},
+                 "note":"Confirmed later valuation",
+                 "confirmed":True, "expected_state_version":version}
+        readback={"verified":True,"as_of":payload["as_of"],
+                  "values":payload["values"],"total_value_cny":10000}
+        with (patch.dict(os.environ,{"BLOB_READ_WRITE_TOKEN":"set"}),
+              patch("investlab.cloud.append_private_valuation",
+                    new=AsyncMock(return_value="state/new.zip")) as save,
+              patch("investlab.cloud.verify_private_valuation",
+                    new=AsyncMock(return_value=readback)) as verify):
+            result=self.client.post("/api/valuation",json=payload,
+                   headers={"Origin":"https://testserver"})
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.json()["status"],"UPDATED")
+        self.assertFalse(result.json()["order_sent"])
+        save.assert_awaited_once_with(payload["values"],payload["as_of"],
+                                      payload["note"],version)
+        verify.assert_awaited_once_with(payload["values"],payload["as_of"])
+
+    def test_stale_or_invalid_update_is_rejected_without_writes(self):
+        body={"as_of":"2026-10-16",
+              "values":{"QQQ":"5700","TQQQ":"0","QLD":"0","CASH":"2300"},
+              "note":"Account owner verified amounts","confirmed":True,
+              "expected_state_version":"stale"}
+        with (patch.dict(os.environ,{"BLOB_READ_WRITE_TOKEN":"set"}),
+              patch("investlab.cloud.append_private_valuation",
+                    new=AsyncMock()) as save):
+            response=self.client.post("/api/valuation",json=body,
+                headers={"Origin":"https://testserver"})
+            self.assertEqual(response.status_code,422)
+            body["expected_state_version"]="state/20261016T120000000000Z-"+"a"*32+".zip"
+            save.side_effect=ValueError("Private account changed")
+            response=self.client.post("/api/valuation",json=body,
+                headers={"Origin":"https://testserver"})
+            self.assertEqual(response.status_code,409)
+            self.assertEqual(save.await_count,1)
+
+    def test_write_rejects_unconfirmed_or_non_json(self):
+        body={"as_of":"2026-10-16",
+              "values":{"QQQ":"5700","TQQQ":"0","QLD":"0","CASH":"2300"},
+              "note":"Account owner verified amounts","confirmed":False}
+        with patch.dict(os.environ,{"BLOB_READ_WRITE_TOKEN":"set"}):
+            self.assertEqual(self.client.post("/api/initialize",json=body,
+                headers={"Origin":"https://testserver"}).status_code,422)
+            self.assertEqual(self.client.post("/api/initialize",
+                data="hello",headers={"Origin":"https://testserver",
+                "Content-Type":"text/plain"}).status_code,415)
 
     def test_docs_disabled_and_cloud_is_vaulted(self):
         self.assertEqual(self.client.get("/docs").status_code,404)
