@@ -30,6 +30,11 @@ jobs:
         run: python -m unittest discover -s tests/app -p test_cloud_runtime.py -v
       - name: Verify protected cloud HTTP boundary
         run: python -m unittest discover -s tests/cloud -v
+      - name: Check browser JavaScript syntax and own UI resources
+        run: |
+          node --check deploy/cloud/assets/app.js
+          test -s deploy/cloud/assets/index.html
+          test -s deploy/cloud/assets/app.css
       - name: Import FastAPI entrypoint
         run: |
           python - <<'PY'
@@ -38,7 +43,7 @@ jobs:
           m=importlib.util.module_from_spec(s)
           s.loader.exec_module(m)
           names={route.path for route in m.app.routes}
-          assert {"/health","/api/status","/api/latest","/api/initialize","/api/cron/daily"} <= names
+          assert {"/","/setup","/health","/api/status","/api/account","/api/history","/api/latest","/api/initialize","/api/valuation","/api/run","/api/cron/daily"} <= names
           assert m.app.docs_url is None
           print("PRIVATE_CLOUD_ROUTES_OK")
           PY
