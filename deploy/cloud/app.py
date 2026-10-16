@@ -289,21 +289,40 @@ async def latest():
             return JSONResponse({"status":"READ_ERROR", "error_type":type(exc).__name__},status_code=503)
 
 
-@app.post("/api/initialize")
-async def initialize(request: Request):
-    _private_origin(request)
-    _require_secret(request.headers.get("x-investlab-admin-token"), "INVESTLAB_ADMIN_TOKEN")
+
+@app.get("/api/account")
+async def private_account():
+    """Read current confirmed valuation; protected by Vercel Authentication."""
     if not _configured():
-        raise HTTPException(503,"Private Blob storage unavailable")
+        raise HTTPException(503, "Private Blob storage unavailable")
+    try:
+        return await cloud.read_private_account()
+    except Exception as exc:
+        return JSONResponse({"status":"STORAGE_ERROR",
+                             "error_type":type(exc).__name__},status_code=503)
+
+
+async def _confirmed_valuation(request: Request, *, update=False):
+    # Vercel Authentication protects all project routes, including write APIs.
+    # An additional user-entered administrator secret is deliberately not used.
+    _private_origin(request)
+    if not _configured():
+        raise HTTPException(503, "Private Blob storage unavailable")
     if int(request.headers.get("content-length", "0")) > 8192:
         raise HTTPException(413, "Maximum request size exceeded")
     try:
-        data = await request.json()
-        if not isinstance(data,dict) or set(data) != {"as_of","values","note","confirmed"}:
-            raise ValueError("Unexpected account fields")
+        raw = await request.body()
+        if len(raw) > 8192:
+            raise HTTPException(413, "Maximum request size exceeded")
+        data = json.loads(raw)
+        expected = {"as_of", "values", "note", "confirmed"}
+        if update:
+            expected.add("expected_state_version")
+        if not isinstance(data,dict) or set(data) != expected:
+            raise ValueError("Unexpected valuation fields")
         if data["confirmed"] is not True:
             raise ValueError("Explicit confirmed valuation required")
-        if not isinstance(data["as_of"],str) or date.fromisoformat(data["as_of"])>date.today():
+        if not isinstance(data["as_of"],str) or date.fromisoformat(data["as_of"]) > date.today():
             raise ValueError("Account valuation date is invalid")
         if not isinstance(data["note"],str) or not 5 <= len(data["note"]) <= 160:
             raise ValueError("Provide valuation source note")
@@ -314,15 +333,53 @@ async def initialize(request: Request):
             raise ValueError("CNY valuations must be nonnegative integer strings")
         if sum(int(v) for v in values.values())<=0:
             raise ValueError("Total portfolio valuation must be positive")
-        version = await cloud.initialize_private_account(values,data["as_of"],data["note"])
-        readback = await cloud.verify_private_valuation(values, data["as_of"])
-        return {"status":"INITIALIZED", "state_version":version,
-                "readback":readback,
-                "order_sent":False, "next_step":"Independent online quote verification"}
-    except ValueError as exc:
+        if update:
+            version = data["expected_state_version"]
+            if not isinstance(version,str) or not re.fullmatch(
+                r"state/[0-9]{8}T[0-9]{12}Z-[0-9a-f]{32}\.zip", version
+            ):
+                raise ValueError("Missing or invalid previous account state version")
+        return data
+    except HTTPException:
+        raise
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
         raise HTTPException(422,str(exc)) from None
+
+
+@app.post("/api/initialize")
+async def initialize(request: Request):
+    data = await _confirmed_valuation(request)
+    try:
+        version = await cloud.initialize_private_account(
+            data["values"], data["as_of"], data["note"]
+        )
+        readback = await cloud.verify_private_valuation(data["values"],data["as_of"])
+        return {"status":"INITIALIZED", "state_version":version,
+                "readback":readback,"order_sent":False,
+                "next_step":"Independent online quote verification"}
+    except ValueError as exc:
+        raise HTTPException(409,str(exc)) from None
     except Exception as exc:
         raise HTTPException(503, "Initialization unavailable: "+type(exc).__name__) from None
+
+
+@app.post("/api/valuation")
+async def append_valuation(request: Request):
+    data = await _confirmed_valuation(request,update=True)
+    try:
+        version = await cloud.append_private_valuation(
+            data["values"],data["as_of"],data["note"],
+            data["expected_state_version"]
+        )
+        readback = await cloud.verify_private_valuation(data["values"],data["as_of"])
+        return {"status":"UPDATED","state_version":version,
+                "readback":readback,"order_sent":False,
+                "next_step":"Daily verification pending"}
+    except ValueError as exc:
+        # Missing/stale state, or out-of-order dated valuation.
+        raise HTTPException(409,str(exc)) from None
+    except Exception as exc:
+        raise HTTPException(503, "Valuation update unavailable: "+type(exc).__name__) from None
 
 
 @app.get("/api/cron/daily")
