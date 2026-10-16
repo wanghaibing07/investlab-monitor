@@ -43,6 +43,13 @@ jobs:
           cp deploy/cloud/app.py "$dest/app.py"
           cp deploy/cloud/vercel.json "$dest/vercel.json"
           cp deploy/cloud/requirements.txt "$dest/requirements.txt"
+          cp -R deploy/cloud/assets "$dest/assets"
+          # Assets contain UI code only; all account values load at request time.
+          node --check "$dest/assets/app.js"
+          test -s "$dest/assets/index.html"
+          test -s "$dest/assets/app.css"
+          test -s "$dest/assets/app.js"
+
           # The Vercel Python builder prioritizes root pyproject.toml; it must
           # explicitly include cloud-only packages, not just requirements.txt.
           CLOUD_OUT="$dest" python - <<'PY'
@@ -69,7 +76,8 @@ jobs:
           files=[p for p in root.rglob("*") if p.is_file()]
           allowed={"app.py","vercel.json","requirements.txt","pyproject.toml","README.md"}
           assert all((p.relative_to(root).as_posix() in allowed or
-               p.relative_to(root).as_posix().startswith("src/")) for p in files)
+               p.relative_to(root).as_posix().startswith("src/") or
+               p.relative_to(root).as_posix().startswith("assets/")) for p in files)
           assert all(not any(x in p.parts for x in
                (".git","backups",".venv","__pycache__")) for p in files)
           for p in files:
@@ -79,6 +87,14 @@ jobs:
           for p in files:
               if p.suffix in (".env",".sqlite3",".db",".zip",".pem",".key"):
                   raise RuntimeError("Private data extension entered cloud build")
+          assert {"index.html","app.css","app.js"} == {
+              p.name for p in (root/"assets").iterdir() if p.is_file()
+          }, "Cloud UI asset set differs from reviewed source"
+          for name in ("index.html","app.css","app.js"):
+              raw=(root/"assets"/name).read_text(encoding="utf-8")
+              assert raw and len(raw)<200000, name
+              assert "BLOB_READ_WRITE_TOKEN" not in raw, name
+          print("VERCEL_CLOUD_WEB_ASSETS_AUDITED")
           print("PRIVATE_ONLY_CODE_FILES",len(files))
           PY
       - name: Test the exact staged manifest in a clean Python environment
