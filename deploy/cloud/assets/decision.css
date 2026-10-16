@@ -329,6 +329,11 @@ body{letter-spacing:.004em}
 .decision-allocation-header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:14px}
 .decision-allocation-header h3{font-size:13px;font-weight:770;margin:0;color:#e6f4db}
 .decision-allocation-header span{font-size:10px;color:#b7d2be;text-align:right}
+.decision-allocation-legend{display:flex;align-items:center;gap:19px;flex-wrap:wrap;font-size:10px;color:#bfd6c5;margin:0 0 16px}
+.decision-allocation-legend span{display:inline-flex;align-items:center;gap:7px}
+.decision-allocation-legend i{width:17px;display:inline-block;flex:none;border-radius:99px}
+.legend-current{height:7px;background:#759b89}
+.legend-step{height:3px;background:#d8eaa1}
 .decision-allocation-rows{display:grid;gap:16px}
 .decision-allocation-row{display:grid;gap:7px}
 .decision-allocation-info{display:flex;gap:10px;align-items:center}
