@@ -157,6 +157,45 @@ async def private_account_verified():
         return True
 
 
+async def verify_private_valuation(values, as_of):
+    """Read persisted private Blob ZIP + SQLite and verify exact confirmed CNY amounts."""
+    from investlab.core import connection
+    from investlab import service
+
+    with tempfile.TemporaryDirectory(prefix="investlab-private-readback-") as tmp:
+        home = Path(tmp) / "private"
+        if not await load_private_home(home):
+            raise RuntimeError("Private account snapshot was not persisted")
+        await asyncio.to_thread(_check_account, home)
+        if service.settings(home)["demo"] is not False:
+            raise RuntimeError("Readback unexpectedly contains demo data")
+        with connection(home, readonly=True) as c:
+            row = c.execute(
+                "SELECT as_of, qqq_value_cny, tqqq_value_cny, "
+                "qld_value_cny, cash_cny FROM portfolio_baselines "
+                "ORDER BY rowid DESC LIMIT 1"
+            ).fetchone()
+        if row is None or row["as_of"] != as_of:
+            raise RuntimeError("Private valuation readback date did not match")
+        for symbol, column in (
+            ("QQQ", "qqq_value_cny"),
+            ("TQQQ", "tqqq_value_cny"),
+            ("QLD", "qld_value_cny"),
+            ("CASH", "cash_cny"),
+        ):
+            if row[column] != int(values[symbol]):
+                raise RuntimeError("Private valuation readback amounts did not match")
+        return {
+            "verified": True,
+            "as_of": row["as_of"],
+            "values": {symbol: str(row[column]) for symbol, column in (
+                ("QQQ", "qqq_value_cny"), ("TQQQ", "tqqq_value_cny"),
+                ("QLD", "qld_value_cny"), ("CASH", "cash_cny")
+            )},
+            "total_value_cny": sum(int(v) for v in values.values()),
+        }
+
+
 async def save_private_home(home):
     archive = await asyncio.to_thread(_make_archive, home)
     return await _write("state", archive, "zip")
