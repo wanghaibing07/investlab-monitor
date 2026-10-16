@@ -15,6 +15,37 @@ from .core import atomic, canonical, digest, utcnow
 NY = ZoneInfo("America/New_York")
 
 
+def parse_alpaca_daily_evidence(pages, *, symbol, completed_session, is_session,
+                               feed, adjustment, retrieved_at, expected_sessions=None):
+    """Optional read-only adapter; never called by Yahoo or the production run.
+
+    Each page is (original response bytes, query metadata). Raw and adjusted
+    requests remain separate. A surviving next_page_token blocks certification.
+    """
+    from .engine.research.qualified_bars import QualifiedDailyBar, validate, source_failure
+    if not pages:raise ValueError('EMPTY_PROVIDER_EVIDENCE')
+    if feed not in ('sip','iex'):raise ValueError('UNSUPPORTED_EVIDENCE_FEED')
+    bars=[];last_token=None;hashes=[];queries=[]
+    for raw,query in pages:
+        if not isinstance(raw,bytes):raise ValueError('ORIGINAL_RESPONSE_BYTES_REQUIRED')
+        if query.get('feed')!=feed or query.get('adjustment')!=adjustment or query.get('timeframe') not in ('1Day','1D'):
+            raise ValueError('PROVIDER_QUERY_CONTRACT_MISMATCH')
+        if query.get('page_token')!=last_token:raise ValueError('PROVIDER_PAGE_CHAIN_MISMATCH')
+        obj=json.loads(raw)
+        if obj.get('http_status') in (401,403):return {'qualification':source_failure(obj['http_status']),'bars':[]}
+        sha=hashlib.sha256(raw).hexdigest();hashes.append(sha);queries.append(query)
+        obj=obj.get('data',obj);last_token=obj.get('next_page_token')
+        for r in obj.get('bars',{}).get(symbol,[]):
+            day=datetime.fromisoformat(r['t'].replace('Z','+00:00')).astimezone(NY).date().isoformat()
+            # All-adjusted OHLC is not raw OHLC. Leave it separate and do not certify raw agreement.
+            if adjustment!='raw':raise ValueError('ADJUSTED_ALPACA_REQUIRES_SEPARATE_RAW_JOIN')
+            bars.append(QualifiedDailyBar(symbol,day,'ALPACA',feed,adjustment,r['c'],None,
+                        retrieved_at,sha,None,r.get('o'),r.get('h'),r.get('l')))
+    qualified=validate(bars,completed_session,is_session,next_page_token=last_token,expected_sessions=expected_sessions)
+    return {'qualification':qualified,'bars':bars,'original_payload_hashes':hashes,'queries':queries,
+            'data_role':'OPTIONAL_RAW_CORROBORATION_ONLY','production_grade_changed':False}
+
+
 def parse_yahoo(payload, symbol, cutoff, is_session):
     chart = payload.get("chart", {})
     if chart.get("error"): raise ValueError("Yahoo returned an error")
