@@ -83,8 +83,8 @@ class SnapshotTests(unittest.TestCase):
         from types import SimpleNamespace
         archive=cloud._make_archive(self.home)
         with (patch("investlab.cloud._list",new=AsyncMock(return_value=[
-                SimpleNamespace(pathname="state/older.zip"),
-                SimpleNamespace(pathname="state/newer.zip")])),
+                SimpleNamespace(pathname="state/20261014T120000000000Z-a.zip"),
+                SimpleNamespace(pathname="state/20261015T120000000000Z-b.zip")])),
               patch("investlab.cloud._read",new=AsyncMock(return_value=archive)) as read):
             result=asyncio.run(cloud.read_private_account())
         self.assertTrue(result["account_initialized"])
@@ -92,9 +92,9 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(result["values"],
                          {"QQQ":"6000","TQQQ":"0","QLD":"0","CASH":"4000"})
         self.assertEqual(result["total_value_cny"],10000)
-        self.assertEqual(result["state_version"],"state/newer.zip")
+        self.assertEqual(result["state_version"],"state/20261015T120000000000Z-b.zip")
         self.assertFalse(result["trading_enabled"])
-        read.assert_awaited_once_with("state/newer.zip")
+        read.assert_awaited_once_with("state/20261015T120000000000Z-b.zip")
 
     def test_read_private_account_absent_is_not_implicitly_created(self):
         with patch("investlab.cloud._list",new=AsyncMock(return_value=[])):
