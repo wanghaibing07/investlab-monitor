@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b111a">
+  <meta name="theme-color" content="#f2f4f0">
   <meta name="description" content="InvestLab 私人投资监控：真实账户、资产配置与可信的运行报告。">
   <title>InvestLab — 私人投资工作台</title>
   <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/decision.css">
   <script src="/assets/app.js" defer></script>
 </head>
 <body>
@@ -65,9 +66,33 @@
    <div id="global-error" class="global-error" hidden role="alert"><svg class="icon"><use href="#i-alert"/></svg><div><strong>无法完整读取账户</strong><p id="global-error-detail">请检查网络与登录权限。</p></div><button type="button" class="button button-secondary" id="error-retry">重试</button></div>
    <section class="page-view is-current" data-page="overview" aria-label="资产总览">
     <div class="page-head">
-     <div><p class="eyebrow">YOUR INVESTMENT OVERVIEW</p><h1>资产总览<span class="heading-dot">.</span></h1><p class="page-sub">把真实持仓、资产结构和策略状态放在一处。</p></div>
+     <div><p class="eyebrow">我的投资决策台</p><h1>先看结论，再看资产</h1><p class="page-sub">今天该做什么、为什么、哪些数字可以信，一屏看清。</p></div>
      <div class="head-actions"><button class="button button-secondary" data-open-editor type="button"><svg class="icon"><use href="#i-edit"/></svg>更新持仓</button><button class="button button-primary" data-open-run type="button"><svg class="icon"><use href="#i-play"/></svg>运行一次监控</button></div>
     </div>
+    <section class="decision-workbench" id="decision-workbench" aria-labelledby="decision-section-title">
+      <div class="decision-primary-panel">
+        <div class="decision-heading"><span class="decision-overline" id="decision-section-title">今日决策简报</span><span class="decision-status" id="decision-badge" role="status">正在核对证据</span></div>
+        <h2 class="decision-headline" id="decision-headline">正在计算可以信任的结论</h2>
+        <p class="decision-description" id="decision-description">先核对账户、行情和独立验证结果，再给出配置复核意见。</p>
+        <div class="next-action">
+          <span class="next-action-label">下一步你要做什么</span>
+          <p id="decision-next-step">正在读取最新监控结果…</p>
+        </div>
+        <div class="action-tickets" id="decision-action-tickets" aria-label="资产逐项配置复核"></div>
+        <div class="decision-footer"><span id="decision-report-time">最新报告：待读取</span><a href="#research" class="decision-see-why">查看模型依据 <svg class="icon"><use href="#i-chevron"/></svg></a></div>
+      </div>
+      <aside class="decision-proof" aria-label="决策可用性与证据">
+        <div class="proof-top"><span>可用性检查</span><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></div>
+        <div class="proof-score"><strong id="decision-proof-status">正在核对</strong><span id="decision-proof-sub">技术通过不等于应该交易</span></div>
+        <dl class="proof-grid">
+          <div><dt>最新行情交易日</dt><dd id="decision-session">—</dd></div>
+          <div><dt>账户估值日期</dt><dd id="decision-account-date">—</dd></div>
+          <div><dt>在线数据核验</dt><dd id="decision-evidence">—</dd></div>
+          <div><dt>模型适用状态</dt><dd id="decision-applicable">—</dd></div>
+        </dl>
+        <div class="proof-disclaimer">所有建议仅供人工复核，不自动下单；只有报告、行情与当前持仓一致时才显示本步比例。</div>
+      </aside>
+    </section>
     <div class="notice notice-info" id="readiness-banner"><div class="notice-icon"><svg class="icon"><use href="#i-info"/></svg></div><div class="notice-body"><strong id="readiness-title">正在确认账户状态</strong><p id="readiness-subtitle">请稍候，系统正在从私有存储读取最新记录。</p></div><a href="#runs" class="notice-link">查看运行状态 <svg class="icon"><use href="#i-chevron"/></svg></a></div>
     <div class="stat-grid">
      <article class="stat-card is-primary"><div class="stat-label">总资产估值 <svg class="icon stat-icon"><use href="#i-wallet"/></svg></div><div class="stat-value" id="metric-total">—</div><div class="stat-footer"><span class="stat-dot blue"></span><span id="metric-total-sub">按已确认人民币估值</span></div></article>
@@ -100,12 +125,14 @@
    <section class="page-view" data-page="research" hidden aria-label="策略与风险">
     <div class="page-head"><div><p class="eyebrow">STRATEGY & RISK</p><h1>策略与风险<span class="heading-dot">.</span></h1><p class="page-sub">区分当前资产、目标方案和模型已经验证的结果。</p></div><div class="head-actions"><a href="#runs" class="button button-secondary"><svg class="icon"><use href="#i-activity"/></svg>查看监控报告</a></div></div>
     <div class="research-intro panel"><div class="research-spark"><svg class="icon"><use href="#i-sparkle"/></svg></div><div><span class="eyebrow">REFERENCE STRATEGY</span><h2>QQQ 60% · TQQQ 40%</h2><p>这是你设定的长期研究目标，不是当前持仓，更不是自动调仓指令。TQQQ 是每日杠杆 ETF，长期风险会随市场路径变化。</p></div><span class="subtle-tag">仅供研究</span></div>
+    <div class="panel model-logic-panel" id="research-decision-panel"><div class="panel-head"><div><h2>这次结论的依据</h2><p>按真实交易日、策略条件和当前持仓逐项展开</p></div><span class="logic-label" id="model-gate-label">等待校验</span></div><div class="logic-overview"><strong id="model-reason-title">尚未生成当前可用结论</strong><p id="model-reason-explanation">验证完成后，此处将显示模型的触发逻辑和需要你复核的条件。</p></div><div class="logic-conditions" id="model-conditions"></div><div class="logic-next"><span>建议处理顺序</span><p id="model-next">先查看监控是否通过。</p></div></div>
     <div class="analytics-grid research-grid"><article class="panel"><div class="panel-head"><div><div class="panel-kicker">TARGET COMPARISON</div><h2>当前与目标配置</h2><p>差异显示百分点，不暗示应该立即交易</p></div></div><div id="weights-comparison" class="comparison-list"></div></article><article class="panel"><div class="panel-head"><div><div class="panel-kicker">RISK ENGINE</div><h2>风险分析</h2><p>只显示真实模型已计算出的风险指标</p></div></div><div id="risk-report" class="risk-report"></div></article></div>
     <div class="panel research-footnote"><svg class="icon"><use href="#i-info"/></svg><p><strong>关于数据：</strong>当前资产估值来自你确认的账户记录；目标权重来自策略配置；模型波动率等指标必须经过真实行情与独立验证后才能显示。InvestLab 不会替你下单。</p></div>
    </section>
    <section class="page-view" data-page="runs" hidden aria-label="运行报告">
     <div class="page-head"><div><p class="eyebrow">SYSTEM RUNS</p><h1>运行报告<span class="heading-dot">.</span></h1><p class="page-sub">检查行情来源、计算结果和最新运行是否达到可信标准。</p></div><div class="head-actions"><button type="button" class="button button-primary" data-open-run><svg class="icon"><use href="#i-play"/></svg>手动运行一次</button></div></div>
     <div class="run-status-panel panel"><div class="run-visual"><span id="run-status-icon"><svg class="icon"><use href="#i-clock"/></svg></span></div><div class="run-status-info"><span class="eyebrow">LATEST RUN</span><h2 id="run-status-title">正在读取最新运行记录</h2><p id="run-status-copy">只在通过全部验证后认定运行成功。</p></div><span id="run-status-tag" class="status-pill">待读取</span></div>
+    <div class="panel outcome-panel"><div><span class="outcome-eyebrow">核验后的业务结论</span><h2 id="run-action-headline">等待完整报告</h2><p id="run-action-explanation">技术校验结果与策略结论分开判断。</p></div><a href="#overview" class="text-link">返回今日决策 <svg class="icon"><use href="#i-chevron"/></svg></a></div>
     <div class="analytics-grid run-grid"><article class="panel"><div class="panel-head"><div><div class="panel-kicker">VALIDATION</div><h2>运行质量检查</h2></div></div><div id="run-checks" class="check-list"></div></article><article class="panel"><div class="panel-head"><div><div class="panel-kicker">RESULT</div><h2>本轮监控结果</h2></div></div><div id="run-detail" class="run-detail"></div></article></div>
     <div class="panel"><div class="panel-head"><div><div class="panel-kicker">EXECUTION RULES</div><h2>运行与交易边界</h2></div></div><div class="guardrail-grid"><div><svg class="icon"><use href="#i-shield"/></svg><strong>账户受保护</strong><p>私有网站访问受到 Vercel 身份保护。</p></div><div><svg class="icon"><use href="#i-check"/></svg><strong>手动审核</strong><p>运行只计算行情、风险和研究信号。</p></div><div><svg class="icon"><use href="#i-alert"/></svg><strong>自动交易关闭</strong><p>无下单功能；定时监控尚未启用。</p></div></div></div>
    </section>
