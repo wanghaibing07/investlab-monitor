@@ -25,7 +25,11 @@ def nyse_session(utc_time=None):
     """At 00:00 UTC on Tue-Sat the completed US session is NY's local date."""
     from .core import ENGINE
     now = utc_time or datetime.now(timezone.utc)
-    ny_day = now.astimezone(ZoneInfo("America/New_York")).date()
+    ny_now = now.astimezone(ZoneInfo("America/New_York"))
+    ny_day = ny_now.date()
+    # Do not compute against the current US trading day before providers settle.
+    if (ny_now.hour, ny_now.minute) < (18, 30):
+        return None
     sys.path.insert(0, str(ENGINE))
     try:
         import monitor
