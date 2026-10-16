@@ -147,6 +147,11 @@ def decision_brief(account: dict | None, run: dict | None, report: dict | None) 
                      "缺少可审核的目标权重，不能凭文字猜测应如何调整。",
                      "重新核对策略报告和权重计算。")
 
+    if any(not 0 <= float(weights[x]) <= 1 for x in TICKERS) or abs(sum(float(weights[x]) for x in TICKERS) - 1) > 1e-7:
+        return _wait(out, "MODEL_BLOCKED", "模型权重未通过自检",
+                     "本步所有资产占比必须在 0% 到 100% 之间，合计等于 100%。",
+                     "检查策略权重计算，不使用异常结果。")
+
     reference = review.get("strategic_reference") or out["reference_weights"]
     if isinstance(reference, dict) and all(_number(reference.get(x)) is not None for x in TICKERS):
         out["reference_weights"] = {x: float(reference[x]) for x in TICKERS}
@@ -157,6 +162,17 @@ def decision_brief(account: dict | None, run: dict | None, report: dict | None) 
         return _wait(out, "MODEL_BLOCKED", "模型操作字段不完整",
                      "暂时无法核对股票及杠杆 ETF 的具体复核动作。",
                      "查看原始模型结果。")
+
+    for symbol in ("QQQ", "TQQQ"):
+        current_weight = out["current_weights"][symbol]
+        next_weight = out["step_weights"][symbol]
+        expected_action = ("INCREASE_REVIEW" if next_weight > current_weight + 1e-9
+                           else "REDUCE_REVIEW" if next_weight < current_weight - 1e-9
+                           else "HOLD")
+        if actions[symbol] != expected_action:
+            return _wait(out, "MODEL_BLOCKED", "模型动作与配置权重不一致",
+                         "文字中的增减动作不能和实际目标比例互相矛盾。",
+                         "暂停配置复核，检查策略规则计算。")
 
     reason = review.get("tactical_reason")
     title, why = REASONS.get(reason, ("本轮仓位复核已生成", "参考模型给出了下一步权重，但还需要你人工核对账户和风险。"))
