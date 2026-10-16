@@ -41,13 +41,21 @@ def parser():
     sub.add_parser("daily-status", help="查看上一次私有每日运行结果")
     sub.add_parser("notify-pending", help="用私有SMTP配置发送待发失败或降级通知")
     sub.add_parser("summary")
+    risk = sub.add_parser("shadow-risk", help="独立影子风险研究；只读账本，输出到新目录")
+    risk.add_argument("--output", required=True)
+    risk.add_argument("--source-commit", required=True)
     return p
 
 
 def main(argv=None):
     args = parser().parse_args(argv); home = home_path(args.home); cmd = args.command
     try:
-        if cmd == "serve":
+        if cmd == "shadow-risk":
+            from .risk_study import study
+            result = study(home, args.output, args.source_commit)
+            print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
+            return 0
+        elif cmd == "serve":
             service.settings(home)
             from .server import serve
             serve(home, args.port, public_demo=args.public_demo, local_edit=args.local_edit); return 0
