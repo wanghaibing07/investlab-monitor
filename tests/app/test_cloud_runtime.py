@@ -60,7 +60,7 @@ class SnapshotTests(unittest.TestCase):
             cloud._check_account(demo)
 
     def test_failure_stores_status_but_not_updated_account_state(self):
-        async def load(home):
+        async def load(home, *, expected_version=None):
             service.init(home,False)
             with connection(home) as c:
                 c.execute(
