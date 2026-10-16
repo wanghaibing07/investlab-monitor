@@ -49,7 +49,7 @@ investlab --home ./runtime/demo run
 investlab --home ./runtime/demo serve
 ```
 
-Open **http://127.0.0.1:8765**. On Windows PowerShell, activate the virtual environment with `.\\.venv\\Scripts\\Activate.ps1`.
+Open **http://127.0.0.1:8765**. On Windows PowerShell, activate the virtual environment with `.\.venv\Scripts\Activate.ps1`.
 
 To verify a local research run:
 
