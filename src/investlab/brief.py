@@ -43,6 +43,31 @@ def _iso_date(value: Any) -> str | None:
     return None
 
 
+def _historical_signal(report: dict, run: dict) -> dict | None:
+    """Prior *research observation*, never a current action or trading approval."""
+    if run.get("status") != "SUCCEEDED" or run.get("qualified_online") is not True:
+        return None
+    if report.get("demo") is not False or report.get("qualified_online") is not True:
+        return None
+    review = report.get("review")
+    if not isinstance(review, dict) or review.get("status") != "ALLOCATION_REVIEW":
+        return None
+    reason = review.get("tactical_reason")
+    if reason not in REASONS:
+        return None
+    title, explanation = REASONS[reason]
+    return {
+        "session": _iso_date(report.get("session_date")),
+        "headline": title,
+        "explanation": explanation,
+        "trend_active": review.get("trend_active")
+            if type(review.get("trend_active")) is bool else None,
+        "qqq_vol20_pct": _number(review.get("qqq_vol20_pct")),
+        "not_current_advice": True,
+        "label": "历史模型观察（不可直接交易）",
+    }
+
+
 def _base(account: dict | None, run: dict | None, report: dict | None) -> dict:
     account = account if isinstance(account, dict) else {}
     run = run if isinstance(run, dict) else {}
@@ -62,6 +87,8 @@ def _base(account: dict | None, run: dict | None, report: dict | None) -> dict:
         "current_weights": None, "reference_weights": {"QQQ": .6, "TQQQ": .4, "QLD": 0.0, "CASH": 0.0},
         "step_weights": None, "steps": [], "conditions": [], "metrics": {},
         "evidence": [], "warnings": [],
+        "historical_signal": _historical_signal(report, run),
+        "portfolio_total_cny": None, "cash_current_cny": None,
         "limitations": "配置复核供人工研究，不等于下单指令、成交股数或个人风险承受能力评估。",
     }
 
@@ -155,7 +182,14 @@ def decision_brief(account: dict | None, run: dict | None, report: dict | None) 
     reference = review.get("strategic_reference") or out["reference_weights"]
     if isinstance(reference, dict) and all(_number(reference.get(x)) is not None for x in TICKERS):
         out["reference_weights"] = {x: float(reference[x]) for x in TICKERS}
-    out["current_weights"] = {x: int(values[x]) / sum(int(v) for v in values.values()) for x in TICKERS}
+    total_cny = sum(int(values[x]) for x in TICKERS)
+    if total_cny <= 0:
+        return _wait(out, "ACCOUNT_MISMATCH", "账户资产总额异常",
+                     "未确认正数资产总额，不能计算配置差异。",
+                     "核对账户估值，再重新运行监控。")
+    out["portfolio_total_cny"] = total_cny
+    out["cash_current_cny"] = int(values["CASH"])
+    out["current_weights"] = {x: int(values[x]) / total_cny for x in TICKERS}
     out["step_weights"] = {x: float(weights[x]) for x in TICKERS}
     actions = review.get("actions") or {}
     if not isinstance(actions, dict) or any(actions.get(x) not in ACTION_LABELS for x in ("QQQ", "TQQQ")):
@@ -188,6 +222,9 @@ def decision_brief(account: dict | None, run: dict | None, report: dict | None) 
             "current_weight": round(current, 6),
             "reference_weight": round(future, 6),
             "change_pp": round((future - current) * 100, 2),
+            "current_value_cny": int(values[symbol]),
+            "step_reference_value_cny": int(round(total_cny * future)),
+            "estimated_difference_cny": int(round(total_cny * future)) - int(values[symbol]),
             "text": (f"{symbol}：{ACTION_LABELS[code]}（当前 {current:.1%} → 本步参考 {future:.1%}）"),
         })
 
@@ -206,6 +243,13 @@ def decision_brief(account: dict | None, run: dict | None, report: dict | None) 
                    "risk_tqqq_variance_share": _number((report.get("risk") or {}).get("tqqq_variance_share")),
                })
     conditions = review.get("entry_conditions") or []
+    out["cash_step_reference_cny"] = int(round(total_cny * out["step_weights"]["CASH"]))
+    out["estimated_cash_change_cny"] = (
+        out["cash_step_reference_cny"] - out["cash_current_cny"]
+    )
+    # Reference CNY differences are not order quantities: they ignore price drift,
+    # fees, spreads, tax, lot sizes, and current currency conversion.
+    out["amounts_are_illustrative"] = True
     out["conditions"] = [
         {"label": str(x.get("rule", ""))[:160], "met": x.get("met")}
         for x in conditions if isinstance(x, dict) and type(x.get("met")) is bool
