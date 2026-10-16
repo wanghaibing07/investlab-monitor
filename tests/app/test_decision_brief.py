@@ -125,6 +125,7 @@ class DecisionBriefTests(unittest.TestCase):
         account,run,report=example()
         report["review"]["actions"]["TQQQ"]="HOLD"
         report["review"]["next_review_weights"]["TQQQ"]=.05
+        report["review"]["next_review_weights"]["CASH"]=.35
         out=decision_brief(account,run,report)
         self.assertEqual(out["priority"],"HOLD")
         self.assertEqual(out["steps"][1]["action"],"HOLD")
