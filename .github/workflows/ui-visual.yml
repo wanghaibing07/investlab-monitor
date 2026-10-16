@@ -1,0 +1,41 @@
+name: Private dashboard browser smoke (synthetic)
+on:
+  pull_request:
+    paths:
+      - 'deploy/cloud/assets/**'
+      - 'tests/visual/**'
+      - '.github/workflows/ui-visual.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/cloud/assets/**'
+      - 'tests/visual/**'
+      - '.github/workflows/ui-visual.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  visual-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Install pinned Playwright and isolated Chromium
+        run: |
+          npm install --no-save --no-audit --no-fund --ignore-scripts playwright@1.64.0
+          npx playwright install --with-deps chromium
+      - name: Test real UI in browser with synthetic private API
+        run: node tests/visual/dashboard_smoke.cjs
+      - name: Upload screenshots for human review
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: investlab-synthetic-desktop-mobile
+          path: artifacts/visual/
+          if-no-files-found: warn
+          retention-days: 7
