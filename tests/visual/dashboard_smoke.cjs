@@ -17,6 +17,7 @@ const VIEWPORTS = [
   { name: "mobile", width: 390, height: 844 },
 ];
 let writes = 0;
+let activeFixture = "first-run"; // Cases are run sequentially in isolated browser contexts.
 const sample = {
   account_initialized: true,
   as_of: "2026-10-15",
@@ -44,7 +45,10 @@ function respond(res, status, obj) {
 }
 function handler(req, res) {
   const url = new URL(req.url, "http://localhost");
-  const scenario = url.searchParams.get("fixture") || "first-run";
+  if (url.pathname === "/" && url.searchParams.has("fixture")) {
+    activeFixture = url.searchParams.get("fixture");
+  }
+  const scenario = activeFixture;
   if (req.method !== "GET") {
     writes += 1;
     return respond(res, 405, { error: "Synthetic UI test forbids writes" });
