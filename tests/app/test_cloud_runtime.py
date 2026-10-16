@@ -79,6 +79,70 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotIn("secret token",json.dumps(result))
         save.assert_not_awaited()
 
+    def test_read_private_account_returns_latest_confirmed_values(self):
+        from types import SimpleNamespace
+        archive=cloud._make_archive(self.home)
+        with (patch("investlab.cloud._list",new=AsyncMock(return_value=[
+                SimpleNamespace(pathname="state/older.zip"),
+                SimpleNamespace(pathname="state/newer.zip")])),
+              patch("investlab.cloud._read",new=AsyncMock(return_value=archive)) as read):
+            result=asyncio.run(cloud.read_private_account())
+        self.assertTrue(result["account_initialized"])
+        self.assertEqual(result["as_of"],"2026-10-14")
+        self.assertEqual(result["values"],
+                         {"QQQ":"6000","TQQQ":"0","QLD":"0","CASH":"4000"})
+        self.assertEqual(result["total_value_cny"],10000)
+        self.assertEqual(result["state_version"],"state/newer.zip")
+        self.assertFalse(result["trading_enabled"])
+        read.assert_awaited_once_with("state/newer.zip")
+
+    def test_read_private_account_absent_is_not_implicitly_created(self):
+        with patch("investlab.cloud._list",new=AsyncMock(return_value=[])):
+            record=asyncio.run(cloud.read_private_account())
+        self.assertFalse(record["account_initialized"])
+        self.assertIsNone(record["state_version"])
+
+    def test_append_valuation_is_historical_and_requires_current_version(self):
+        from types import SimpleNamespace
+        archive=cloud._make_archive(self.home)
+        version="state/20261014T100000000000Z-"+"a"*32+".zip"
+        recorded={}
+        async def save(home):
+            with connection(home,readonly=True) as db:
+                rows=db.execute(
+                    "SELECT as_of,qqq_value_cny,cash_cny FROM portfolio_baselines "
+                    "ORDER BY rowid").fetchall()
+                recorded["rows"]=[tuple(row) for row in rows]
+                recorded["valuations"]=db.execute(
+                    "SELECT COUNT(*) FROM account_valuations").fetchone()[0]
+            return "state/newest.zip"
+        with (patch("investlab.cloud._list",new=AsyncMock(return_value=[
+                SimpleNamespace(pathname=version)])),
+              patch("investlab.cloud._read",new=AsyncMock(return_value=archive)),
+              patch("investlab.cloud.save_private_home",side_effect=save) as write):
+            result=asyncio.run(cloud.append_private_valuation(
+                {"QQQ":"6100","TQQQ":"0","QLD":"0","CASH":"3900"},
+                "2026-10-15","Owner reconfirmed updated valuation",version))
+        self.assertEqual(result,"state/newest.zip")
+        self.assertEqual(recorded["rows"],[
+            ("2026-10-14",6000,4000),("2026-10-15",6100,3900)])
+        self.assertEqual(recorded["valuations"],1)
+        write.assert_awaited_once()
+
+    def test_append_valuation_rejects_stale_version_without_write(self):
+        from types import SimpleNamespace
+        version="state/20261014T100000000000Z-"+"a"*32+".zip"
+        with (patch("investlab.cloud._list",new=AsyncMock(return_value=[
+                SimpleNamespace(pathname=version)])),
+              patch("investlab.cloud._read",new=AsyncMock()) as read,
+              patch("investlab.cloud.save_private_home",new=AsyncMock()) as write):
+            with self.assertRaisesRegex(ValueError,"changed"):
+                asyncio.run(cloud.append_private_valuation(
+                    {"QQQ":"6100","TQQQ":"0","QLD":"0","CASH":"3900"},
+                    "2026-10-15","Owner confirmed latest", "state/stale.zip"))
+        read.assert_not_awaited()
+        write.assert_not_awaited()
+
     def test_private_valuation_readback_checks_exact_amounts_and_date(self):
         from types import SimpleNamespace
         archive=cloud._make_archive(self.home)
