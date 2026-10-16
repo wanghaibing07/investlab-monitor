@@ -68,6 +68,27 @@ class DecisionBriefTests(unittest.TestCase):
         self.assertEqual(result["estimated_cash_change_cny"], -250)
         self.assertTrue(result["amounts_are_illustrative"])
 
+    def test_review_tells_user_which_asset_to_check_and_amount(self):
+        account, run, report = example()
+        result = decision_brief(account, run, report)
+        self.assertEqual(result["status"], "ACTION_REVIEW")
+        self.assertIn("增加 TQQQ", result["next_step"])
+        self.assertIn("¥250", result["next_step"])
+        self.assertIn("由本人决定", result["next_step"])
+        self.assertFalse(result["trading_enabled"])
+
+    def test_review_prioritizes_deleveraging_over_new_additions(self):
+        account, run, report = example()
+        report["review"]["next_review_weights"] = {
+            "QQQ": .70, "TQQQ": .03, "QLD": 0.0, "CASH": .27
+        }
+        report["review"]["actions"]["QQQ"] = "INCREASE_REVIEW"
+        report["review"]["actions"]["TQQQ"] = "REDUCE_REVIEW"
+        result = decision_brief(account, run, report)
+        self.assertEqual(result["status"], "ACTION_REVIEW")
+        self.assertIn("减少 TQQQ", result["next_step"])
+        self.assertIn("¥200", result["next_step"])
+
     def test_stale_verified_run_keeps_historical_observation_not_trade_steps(self):
         account, run, report = example()
         report["market_session_current"] = False
