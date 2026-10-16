@@ -380,6 +380,50 @@ async def append_valuation(request: Request):
         raise HTTPException(503, "Valuation update unavailable: "+type(exc).__name__) from None
 
 
+@app.post("/api/run")
+async def manual_run(request: Request):
+    """Explicit, read-only investment monitor run from the protected browser."""
+    _private_origin(request)
+    if not _configured():
+        raise HTTPException(503, "Private storage unavailable")
+    try:
+        if int(request.headers.get("content-length", "0")) > 1024:
+            raise HTTPException(413, "Maximum request size exceeded")
+        raw = await request.body()
+        if len(raw) > 1024:
+            raise HTTPException(413, "Maximum request size exceeded")
+        payload = json.loads(raw)
+        if not isinstance(payload, dict) or set(payload) != {"confirmed", "expected_state_version"}:
+            raise ValueError("Unexpected run request fields")
+        if payload["confirmed"] is not True:
+            raise ValueError("Explicit confirmation required")
+        version = payload["expected_state_version"]
+        if not isinstance(version, str) or not re.fullmatch(
+            r"state/[0-9]{8}T[0-9]{12}Z-[0-9a-f]{32}\.zip", version
+        ):
+            raise ValueError("Invalid private account version")
+    except HTTPException:
+        raise
+    except (ValueError, TypeError, json.JSONDecodeError):
+        raise HTTPException(422, "Invalid manual run request") from None
+    try:
+        account = await cloud.read_private_account()
+    except Exception as exc:
+        return JSONResponse({"status": "STORAGE_ERROR",
+                             "failure_type": type(exc).__name__}, status_code=503)
+    if not account.get("account_initialized"):
+        raise HTTPException(409, "Confirm and save an account first")
+    if account.get("state_version") != version:
+        raise HTTPException(409, "Account changed; refresh before running")
+    try:
+        result = await cloud.run_private_daily(expected_version=version)
+    except Exception as exc:
+        return JSONResponse({"status": "FAILED",
+                             "failure_type": type(exc).__name__,
+                             "trading_enabled": False}, status_code=503)
+    return JSONResponse(result, status_code=200 if result.get("status") == "SUCCEEDED" else 503)
+
+
 @app.get("/api/cron/daily")
 async def daily_run(request: Request):
     bearer = request.headers.get("authorization", "")
