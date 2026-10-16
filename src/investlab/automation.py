@@ -34,12 +34,13 @@ def nyse_session(utc_time=None):
         sys.path.pop(0)
 
 
-async def _claim(session, attempt):
+async def _claim(session, attempt, account_version):
     """Durable single-winner claim for a given NYSE session and attempt."""
     from vercel.blob import put_blob
     if attempt not in ("primary", "retry"):
         raise ValueError("Unknown scheduled attempt")
-    path = f"schedule-claims/{session}-{attempt}.json"
+    generation = hashlib.sha256(str(account_version).encode()).hexdigest()[:24]
+    path = f"schedule-claims/{session}-{generation}-{attempt}.json"
     data = json.dumps({"session": session, "attempt": attempt,
                        "claimed_at": cloud.now()}, sort_keys=True).encode()
     try:
@@ -91,20 +92,22 @@ async def execute_once(attempt="primary", *, current_session=None):
         return {"status": "SKIPPED_CLOSED_SESSION", "trading_enabled": False}
     if attempt not in ("primary", "retry"):
         raise ValueError("Unknown scheduled attempt")
+    account = await cloud.read_private_account()
+    source_version = account.get("state_version") or "no-confirmed-account"
     previous = await _last_receipt()
     if previous and previous.get("scheduled_session") == session and \
-            previous.get("status") == "SUCCEEDED":
+            previous.get("status") == "SUCCEEDED" and \
+            previous.get("account_state_version") == source_version:
         return {"status": "ALREADY_VERIFIED", "scheduled_session": session,
                 "trading_enabled": False}
 
-    claimed = await _claim(session, attempt)
+    claimed = await _claim(session, attempt, source_version)
     if not claimed:
         return {"status": "DUPLICATE_SUPPRESSED", "scheduled_session": session,
                 "trading_enabled": False}
     report = {"status": "RUNNING", "scheduled_session": session,
               "attempt": attempt, "started_at": cloud.now(), "trading_enabled": False}
     try:
-        account = await cloud.read_private_account()
         if account.get("account_initialized") is not True:
             raise ValueError("Missing confirmed private account")
         source_version = account["state_version"]
@@ -170,8 +173,10 @@ async def daily_watchdog():
     if session is None:
         return {"status": "SKIPPED_CLOSED_SESSION", "trading_enabled": False}
     receipt = await _last_receipt()
+    account = await cloud.read_private_account()
     if receipt and receipt.get("scheduled_session") == session and \
-            receipt.get("status") == "SUCCEEDED":
+            receipt.get("status") == "SUCCEEDED" and \
+            receipt.get("account_state_version") == account.get("state_version"):
         return {"status": "VERIFIED", "scheduled_session": session,
                 "trading_enabled": False}
     result = await execute_once("retry", current_session=session)
