@@ -99,6 +99,63 @@ class CloudWebSecurityTests(unittest.TestCase):
         self.assertNotIn("token", response.text)
         latest.assert_not_awaited()
 
+    def test_setup_page_is_non_sensitive_and_js_is_same_origin(self):
+        page=self.client.get("/setup")
+        self.assertEqual(page.status_code,200)
+        self.assertIn('id="token"',page.text)
+        self.assertIn('type="password"',page.text)
+        self.assertIn('/setup.js',page.text)
+        self.assertNotIn('12000',page.text)
+        self.assertNotIn('8000',page.text)
+        script=self.client.get("/setup.js")
+        self.assertEqual(script.status_code,200)
+        self.assertIn('"/api/initialize"',script.text)
+        self.assertIn('X-Investlab-Admin-Token',script.text)
+        self.assertIn('script-src',page.headers["content-security-policy"])
+        self.assertIn('connect-src',script.headers["content-security-policy"])
+
+    def test_authorized_init_returns_verified_persisted_cny_receipt(self):
+        payload={"as_of":"2026-10-16",
+                 "values":{"QQQ":"12000","TQQQ":"0","QLD":"0","CASH":"8000"},
+                 "note":"Account owner confirmed 2026-10-16 valuation",
+                 "confirmed":True}
+        readback={"verified":True,"as_of":"2026-10-16",
+                  "values":payload["values"],"total_value_cny":20000}
+        with (patch.dict(os.environ,{"INVESTLAB_ADMIN_TOKEN":"Z"*48,
+                                    "BLOB_READ_WRITE_TOKEN":"set"}),
+              patch("investlab.cloud.initialize_private_account",
+                    new=AsyncMock(return_value="state/validated.zip")) as save,
+              patch("investlab.cloud.verify_private_valuation",
+                    new=AsyncMock(return_value=readback)) as verify):
+            response=self.client.post("/api/initialize",json=payload,headers={
+                "Origin":"https://testserver",
+                "X-Investlab-Admin-Token":"Z"*48
+            })
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()["status"],"INITIALIZED")
+        self.assertEqual(response.json()["readback"],readback)
+        self.assertFalse(response.json()["order_sent"])
+        save.assert_awaited_once_with(payload["values"],"2026-10-16",payload["note"])
+        verify.assert_awaited_once_with(payload["values"],"2026-10-16")
+
+    def test_failed_readback_is_not_claimed_as_success(self):
+        payload={"as_of":"2026-10-16",
+                 "values":{"QQQ":"12000","TQQQ":"0","QLD":"0","CASH":"8000"},
+                 "note":"Owner confirmed CNY values","confirmed":True}
+        with (patch.dict(os.environ,{"INVESTLAB_ADMIN_TOKEN":"Z"*48,
+                                    "BLOB_READ_WRITE_TOKEN":"set"}),
+              patch("investlab.cloud.initialize_private_account",
+                    new=AsyncMock(return_value="state/validated.zip")),
+              patch("investlab.cloud.verify_private_valuation",
+                    new=AsyncMock(side_effect=RuntimeError("Mismatch: private secret")))):
+            response=self.client.post("/api/initialize",json=payload,headers={
+                "Origin":"https://testserver",
+                "X-Investlab-Admin-Token":"Z"*48
+            })
+        self.assertEqual(response.status_code,503)
+        self.assertNotIn("private secret",response.text)
+        self.assertNotIn("INITIALIZED",response.text)
+
     def test_docs_disabled_and_cloud_is_vaulted(self):
         self.assertEqual(self.client.get("/docs").status_code,404)
         self.assertEqual(self.client.get("/openapi.json").status_code,404)
