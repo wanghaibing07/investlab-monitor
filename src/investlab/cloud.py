@@ -133,11 +133,13 @@ def _restore_archive(home, raw):
             raise ValueError("Private snapshot is not SQLite")
 
 
-async def load_private_home(home):
+async def load_private_home(home, *, expected_version=None):
     objects = await _list("state/")
     names = sorted(obj.pathname for obj in objects if obj.pathname.endswith(".zip"))
     if not names:
         return False
+    if expected_version is not None and expected_version != names[-1]:
+        raise ValueError('Account version changed before run')
     raw = await _read(names[-1])
     _restore_archive(home, raw)
     return True
@@ -310,7 +312,7 @@ def _compute(home):
     }
 
 
-async def run_private_daily():
+async def run_private_daily(*, expected_version=None):
     """Fail closed with a stored report and leave previous state intact on errors."""
     from investlab import service
     report = {"status": "RUNNING", "started_at": now(), "trading_enabled":False}
@@ -318,7 +320,7 @@ async def run_private_daily():
         home = Path(tmp) / "private"
         home.mkdir(mode=0o700)
         try:
-            existing = await load_private_home(home)
+            existing = await load_private_home(home, expected_version=expected_version)
             if not existing:
                 report.update(status="SETUP_REQUIRED",issue_code="NO_PRIVATE_ACCOUNT_SNAPSHOT")
                 return report
