@@ -104,6 +104,18 @@ class DecisionBriefTests(unittest.TestCase):
         self.assertEqual(out["status"],"MODEL_BLOCKED")
         self.assertFalse(out["actionable"])
 
+    def test_model_weight_total_and_leg_directions_must_agree(self):
+        a,r,p=example()
+        p["review"]["next_review_weights"]["QQQ"]=.5
+        out=decision_brief(a,r,p)
+        self.assertEqual(out["status"],"MODEL_BLOCKED")
+        self.assertFalse(out["actionable"])
+        a,r,p=example()
+        p["review"]["actions"]["TQQQ"]="HOLD"
+        out=decision_brief(a,r,p)
+        self.assertEqual(out["status"],"MODEL_BLOCKED")
+        self.assertEqual(out["steps"],[])
+
     def test_missing_account_requires_real_confirmation(self):
         _,run,report=example()
         out=decision_brief({"account_initialized":False},run,report)
@@ -132,6 +144,7 @@ class DecisionBriefTests(unittest.TestCase):
         account["values"]=values
         report["portfolio"]["qqq_value_cny"]=5700
         report["portfolio"]["cash_cny"]=3800
+        report["review"]["actions"]["QQQ"]="INCREASE_REVIEW"
         out=decision_brief(account,run,report)
         self.assertTrue(out["actionable"])
         self.assertAlmostEqual(out["current_weights"]["QQQ"],.57)
