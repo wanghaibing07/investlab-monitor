@@ -48,6 +48,7 @@ jobs:
           node --check "$dest/assets/app.js"
           test -s "$dest/assets/index.html"
           test -s "$dest/assets/app.css"
+          test -s "$dest/assets/decision.css"
           test -s "$dest/assets/app.js"
 
           # The Vercel Python builder prioritizes root pyproject.toml; it must
@@ -87,10 +88,10 @@ jobs:
           for p in files:
               if p.suffix in (".env",".sqlite3",".db",".zip",".pem",".key"):
                   raise RuntimeError("Private data extension entered cloud build")
-          assert {"index.html","app.css","app.js"} == {
+          assert {"index.html","app.css","app.js","decision.css"} == {
               p.name for p in (root/"assets").iterdir() if p.is_file()
           }, "Cloud UI asset set differs from reviewed source"
-          for name in ("index.html","app.css","app.js"):
+          for name in ("index.html","app.css","app.js","decision.css"):
               raw=(root/"assets"/name).read_text(encoding="utf-8")
               assert raw and len(raw)<200000, name
               assert "BLOB_READ_WRITE_TOKEN" not in raw, name
