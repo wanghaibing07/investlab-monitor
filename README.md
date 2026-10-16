@@ -2,35 +2,44 @@
 
 # InvestLab
 
-**把 QQQ / TQQQ 的持仓、行情和投资策略放在一起，让每天的投资决定有据可查。**
+**每天看清 QQQ / TQQQ 的持仓、行情和风险，再决定是否调整。**
 
-InvestLab 是一个开源、可在自己电脑上运行的投资监控工具。它帮你看清**现在持有什么、今天需要关注什么、为什么考虑调整仓位，以及不同投资方法过去表现如何**。系统提供计算和判断依据，买卖由你自己决定。
+InvestLab 是一款**开源、可在自己电脑上运行的 ETF 投资监控与策略研究工具**。它把账户估值、市场行情、策略对比和历史报告放在一起，帮你回答：**现在持有什么？发生了什么变化？下一步为什么值得关注？**
 
-**[在线体验（虚构数据）](https://investlab-monitor.vercel.app/)**：无需安装。在线版是只读的演示快照，不接入实时行情或真实账户；完整功能请在本机运行。
+它提供数据和研究依据，**不会自动买卖股票或 ETF**。
+
+**[在线体验（无需登录，全部是虚构数据）](https://investlab-monitor.vercel.app/)** · **[本地快速开始](#本地快速开始)** · **[计算与验证](#结果为什么值得核对)** · **[English](README.en.md)**
 
 [![CI](https://github.com/wanghaibing07/investlab-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/wanghaibing07/investlab-monitor/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-[快速体验](#快速体验) · [能用来做什么](#能用来做什么) · [使用自己的账户](#使用自己的账户) · [计算是否可信](#计算是否可信) · [更多文档](#更多文档)
+## 它能帮你做什么
 
-## 能用来做什么
-
-打开网页看板，主要看三个页面：
-
-| 页面 | 你能看到什么 |
+| 你的问题 | InvestLab 提供什么 |
 | --- | --- |
-| **今日判断** | 最后确认的持仓、目标比例、下一步调整参考、判断理由，以及行情是否更新 |
-| **策略研究** | 同一段历史行情下，不同投资规则的收益曲线、最大回撤、波动和交易费用 |
-| **流水与运行** | 已确认的账户变动、历史计算记录，以及每次运行的结果 |
+| **我的钱现在在哪里？** | 查看 QQQ、TQQQ、QLD 和现金的已确认估值、比例与历史变化。 |
+| **今天行情有什么变化？** | 跟踪美股收盘数据，检查日期和来源；数据不合格时明确标记。 |
+| **现在要调整仓位吗？** | 对照策略规则，给出本步参考比例、理由和风险条件，供人工决定。 |
+| **哪个策略更合适？** | 在相同历史行情和交易费用下比较策略的收益、回撤与波动。 |
+| **以后能追查与恢复吗？** | 保存运行记录、研究依据与账户备份，支持校验和隔离恢复。 |
 
-日常使用可以按这个顺序：**先核对持仓和行情日期 → 看调整参考及原因 → 比较风险 → 自己决定是否交易**。
+你可以按照这个顺序使用：**看账户 → 核对行情是否最新 → 理解策略与风险 → 自己决定是否交易**。
 
-项目还提供账户流水记录、历史报告、定时更新、备份恢复和独立计算核对。数据可以留在自己的运行目录中，不需要把个人账户上传到 GitHub。
+## 先试试看
 
-## 快速体验
+**[打开公开演示](https://investlab-monitor.vercel.app/)**，无需安装、无需账号。可以直接浏览「今日判断」「策略研究」「流水与运行」。
 
-准备 **Python 3.11+**，复制以下命令即可用**虚构账户和示例行情**打开看板，无需提供真实持仓。核心演示可离线运行。
+演示中的账户、行情和计算结果**全部是虚构的**；它展示产品交互，不提供实时市场报价或真实投资建议。你的真实账户不会出现在公开演示站点。
+
+想使用自己的数据，有两种方式：
+
+- **在自己电脑运行**：适合体验完整计算、独立验证、导入账户及保存历史记录。
+- **自行部署私有云端**：使用受登录保护的 Vercel 运行环境，支持私有账户、手动计算和可配置的定时监控。私人工作台不是公开演示，也不是本仓库提供的公共账号服务。
+
+## 本地快速开始
+
+需要 **Python 3.11+**。下面使用虚构账户和演示行情，不需要任何 API 密钥。
 
 ~~~bash
 git clone https://github.com/wanghaibing07/investlab-monitor.git
@@ -41,129 +50,67 @@ python -m pip install .
 
 investlab --home ./runtime/demo init --demo
 investlab --home ./runtime/demo run
-investlab --home ./runtime/demo verify
 investlab --home ./runtime/demo serve
 ~~~
 
-浏览器打开 **http://127.0.0.1:8765**。你会看到今日判断、策略对比和历史记录；演示数据会标明为模拟数据。按 `Ctrl+C` 关闭网页服务。
+打开 **http://127.0.0.1:8765** 即可查看本地看板；按 `Ctrl+C` 停止服务。Windows PowerShell 将激活命令改为 `.\.venv\Scripts\Activate.ps1`。
 
-Windows PowerShell 把 `source .venv/bin/activate` 换成 `.\.venv\Scripts\Activate.ps1`，其余命令相同。命令行和网页目前主要使用中文。
-
-想检查演示数据是否完整，可另开终端并激活同一虚拟环境：
+想检查演示结果是否自洽，可在另一个终端运行：
 
 ~~~bash
+investlab --home ./runtime/demo verify
 investlab --home ./runtime/demo audit
 ~~~
 
-## 默认关注的投资组合
+要录入自己的持仓估值、导入真实成交流水或联网更新行情，参阅 [本地网页操作](docs/LOCAL_WEB.md) 和 [使用手册](docs/OPERATIONS.md)。**估值变化不等于实际成交**，只有本人确认的交易才会记录为交易。
 
-当前内置的长期目标是 **60% QQQ + 40% TQQQ**。两只基金都跟踪纳斯达克 100 相关风险，其中 **TQQQ 追求每日 3 倍杠杆表现**，长期持有的风险和波动明显更高。
+## 项目的核心设计
 
-系统参考 **200 日价格趋势和近 20 日波动**，再结合你最后确认的实际持仓，给出分步调整参考；单次建议增加的 TQQQ 不超过总资产的 **5 个百分点**。这是一套可供研究的既定规则，并非适合所有人的投资比例。
+### 1. 关注 QQQ / TQQQ，而不是做通用证券交易平台
 
-**重点：目标仓位不等于实际成交。** 程序不会因为出现调整建议就修改你的交易记录，也不会连接券商自动下单。只有导入已确认的账户数据，记录才会更新。
+默认研究组合的长期参考比例是 **60% QQQ + 40% TQQQ**。系统结合 200 日趋势与近期波动，给出分步复核建议；单步增加 TQQQ 的参考幅度设有上限。
 
-## Alpaca 模拟账户与风险情景
+这只是项目内置的研究规则，不代表每天都要买入，也不适用于每个人。**TQQQ 追求纳斯达克 100 指数每日 3 倍表现，连续多日的收益并不等于指数累计涨幅乘以三。**
 
-- **网页演示**：在「策略研究」页调整指数单日涨跌和 TQQQ 仓位，即时查看假设的单日组合敏感性，不下单。
-- **本地模拟券商接入**：`alpaca-paper-snapshot` 只读取 Alpaca Paper Trading 模拟账户和持仓，单独保存为美元风险快照；不修改人民币账户。
-- **研究方法**：参照 Public Equity Investing 的风险敞口、情景分析和证据分级原则。ChatGPT 的插件授权不会传给网站。
-- 具体使用方法、凭据和边界见 [Alpaca 模拟账户](docs/ALPACA_PAPER.md)。
+### 2. 不只展示结论，也展示依据
 
-## 本地网页录入账户与重新计算
+- 行情结果包含**交易日、来源和数据校验状态**。同一数据商的两个接口不算两个独立来源。
+- 研究会检查**计算结果、账本一致性和策略复算**，不把程序通过测试等同于策略未来能赚钱。
+- 回测统一比较费用、收益、最大回撤和波动；信号与交易时间分开，避免用事后信息“预测”过去。
+- 历史账户估值和真实成交分别保存，不把资产估值曲线直接包装成投资收益率。
 
-无需编写JSON文件，也可以在本机网页上添加已确认的人民币资产估值：
+### 3. 支持长期记录与定时监控
 
-```bash
-investlab --home ~/.local/share/investlab init
-investlab --home ~/.local/share/investlab serve --local-edit
-```
+- **本地运行**：提供定时运行、备份恢复和可选的 SMTP 故障邮件通知。
+- **私有 Vercel 部署**：实现了按美股交易日调度、同一账户版本的重复运行控制、独立保存研究结果及延迟补跑。是否实际完成每轮行情计算，必须查看真实运行回执。
+- 自动计算不覆盖人工确认的持仓，**也不会连接券商自动下单**。邮件通知需要自行配置并测试送达。
 
-打开 `http://127.0.0.1:8765`，填写QQQ、TQQQ、QLD和现金估值，确认后保存。然后自行选择使用缓存行情计算或联网更新并核验行情。该操作**不会被记成买卖成交**，不会自动下单。首次初始化只执行一次；已有目录直接运行 `serve --local-edit` 即可。普通 `serve` 继续只读，公网演示版始终禁止编辑账户。
+详细配置和适用条件见 [私有云部署](docs/VERCEL_CLOUD.md)、[每日自动监控](docs/VERCEL_DAILY_AUTOMATION.md) 和 [本地运行与告警](docs/DAILY_OPERATIONS.md)。
 
-[查看本地网页操作与安全边界](docs/LOCAL_WEB.md)。
+## 结果为什么值得核对
 
-## 使用自己的账户
+本项目把两件事分开：
 
-先用 [估值文件示例](examples/valuation.json) 填写你的真实资产金额，再运行：
+**程序有没有按规则算对**：通过自动化测试、账本审计、两种独立计算方式复核和备份恢复检查来验证。
 
-~~~bash
-investlab --home ~/.local/share/investlab init
-investlab --home ~/.local/share/investlab valuation-import my-valuation.json
-investlab --home ~/.local/share/investlab run --online --independent-check --require-current
-investlab --home ~/.local/share/investlab summary
-~~~
+**投资策略长期有没有效果**：需要真实、持续的未来交易日数据，不能靠一次回测或一次成功部署证明。
 
-- **估值**记录各资产当前金额；**成交流水**记录真正买卖的股数、成本和资金变化。已确认交易可按 [流水示例](examples/events.json) 使用 `ledger-import` 导入。
-- `run --online` 获取行情、生成结论并保存结果；`summary` 用简短中文说明本次判断。
-- 真实账户放在独立的私有目录。在线更新会访问行情提供商，但本地账户文件不必提交到公开仓库。
+你可以查看 [验证记录](docs/VALIDATION.md)、[研究公式与假设](docs/FORMULAS.md) 和 [GitHub CI](https://github.com/wanghaibing07/investlab-monitor/actions/workflows/ci.yml)。这里不把某个历史测试数量写成永久有效的“当前成绩”；每次代码更新以对应的 CI 和运行证据为准。
 
-行情来自外部服务时，系统会显示数据日期、来源和检查结果；同一供应商的多个接口不会被当成多个独立来源。
+## 文档入口
 
-## 计算是否可信
-
-项目把“**程序算对了**”和“**策略未来能赚钱**”分开验证。
-
-| 关心的问题 | 项目如何处理 |
+| 想了解 | 阅读 |
 | --- | --- |
-| 计算有没有算错？ | 用另一套计算方法复核 10 类策略、两档交易费用，共 20 组结果 |
-| 有没有偷看未来行情？ | 检查信号产生、下一交易日执行及后续收益的时间顺序 |
-| 回测是不是实际收益？ | 历史策略对比使用美元 ETF 行情；个人账户收益单独按实际流水核算 |
-| 数据丢了怎么办？ | 可以备份、恢复，并检查数据库和文件是否完整 |
-| 可以长期自动运行吗？ | 提供 [systemd 定时任务](deploy/investlab.timer) 和 [容器配置](deploy/compose.yaml) |
+| 项目如何组成 | [架构说明](docs/ARCHITECTURE.md) |
+| 如何导入真实估值与交易 | [本地网页](docs/LOCAL_WEB.md) · [操作手册](docs/OPERATIONS.md) |
+| 策略公式、回测费用与风险假设 | [研究方法](docs/FORMULAS.md) |
+| 如何接入 Alpaca 模拟账户（只读） | [Alpaca Paper Trading](docs/ALPACA_PAPER.md) |
+| 如何部署私有云、定时更新与恢复 | [Vercel 云端](docs/VERCEL_CLOUD.md) · [每日自动监控](docs/VERCEL_DAILY_AUTOMATION.md) |
+| 计算与部署有哪些证据 | [验证记录](docs/VALIDATION.md) · [自动化测试](https://github.com/wanghaibing07/investlab-monitor/actions) |
+| 设计参考、讨论和贡献 | [开源参考](docs/UPSTREAM_REVIEW.md) · [贡献指南](CONTRIBUTING.md) · [Issues](https://github.com/wanghaibing07/investlab-monitor/issues) |
 
-截至 **2026-10-15** 的[验证记录](docs/VALIDATION.md)：**240 项测试通过，1 项依赖可选外部数据的测试跳过**；Python 3.11–3.13 和容器流程已在 GitHub CI 验证。20 组收益曲线的独立复算结果一致。
+## 许可证与数据说明
 
-历史回测用于比较方法，不等于未来收益承诺。回测计入两档模拟交易费用，未计税费与现金利息；真实账户结果还取决于交易、资金流和汇率。完整假设见[研究方法](docs/FORMULAS.md)。
+[MIT 许可证](LICENSE)。公开演示仅使用虚构数据。真实账户、密钥、备份和受授权限制的第三方行情数据不应提交到公开 GitHub 仓库。
 
-## 私有 Vercel 云端运行（独立部署）
-
-云端版 `investlab-cloud` 在 Vercel Authentication 后访问；使用私有 Blob 保存版本化的账户与计算快照，绝不与 [公开虚构演示](https://investlab-monitor.vercel.app/) 共享真实账户数据。新建项目默认**不自动初始化用户账户，也不启用 Cron**，先完成本人确认的账户初始化和线上验证；避免尚未配置的任务被误报为运行成功。
-
-[私有云端架构、配置和验收说明](docs/VERCEL_CLOUD.md)。
-
-## 每日自动运行与失败告警
-
-在自己的私有 Linux 主机上，可运行 `daily-cycle` 完成在线行情、持久化、独立复核、成熟结果评价与状态记录：
-
-```bash
-investlab --home ~/.local/share/investlab daily-cycle
-investlab --home ~/.local/share/investlab daily-status
-```
-
-失败和宏观数据降级会产生私有待发通知；仅配置 SMTP 后 `notify-pending` 才会发送邮件。默认不发送邮件，也不会把账户数据上传 Vercel。
-
-[查看定时任务、私有告警配置与故障恢复](docs/DAILY_OPERATIONS.md)。
-
-## 常用命令
-
-使用同一个 `--home` 目录保存你的记录。
-
-| 命令 | 用途 |
-| --- | --- |
-| `run` / `summary` | 计算并保存 / 查看当天简短结论 |
-| `valuation-import FILE` / `ledger-import FILE` | 更新确认估值 / 导入已确认成交 |
-| `account NAME` | 查看账户现金、持仓与成本 |
-| `research` / `verify` | 研究历史策略 / 独立复算 |
-| `audit` / `doctor` | 检查数据完整性 / 检查运行环境 |
-| `backup --output FILE.zip` | 备份账户、报告和研究记录 |
-| `restore FILE.zip --to EMPTY_DIRECTORY` | 恢复到新的空目录 |
-| `serve` | 打开仅供本机访问的只读网页 |
-
-每日更新、容器部署、迁移与恢复示例见[操作手册](docs/OPERATIONS.md)。
-
-## 更多文档
-
-| 想了解什么 | 阅读入口 |
-| --- | --- |
-| English introduction and usage | [English README](README.en.md) |
-| 程序由哪些部分组成 | [架构说明](docs/ARCHITECTURE.md) |
-| 投资规则、公式、费用和回测假设 | [研究方法](docs/FORMULAS.md) |
-| 安装、定时运行、备份与迁移 | [操作手册](docs/OPERATIONS.md) |
-| 测试和独立复核的具体依据 | [验证记录](docs/VALIDATION.md) |
-| 参考了哪些开源项目 | [源码参考与设计选择](docs/UPSTREAM_REVIEW.md) |
-| 反馈问题、参与开发 | [贡献指南](CONTRIBUTING.md) · [Issues](https://github.com/wanghaibing07/investlab-monitor/issues) |
-
-## 开源许可
-
-代码采用 [MIT 许可证](LICENSE)。个人账户、行情缓存、备份和密钥应保存在私有目录；第三方行情数据另遵循对应服务的使用条款。
+InvestLab 提供投资研究与记录工具，不代替交易执行、个性化投资咨询或真实券商账单。
