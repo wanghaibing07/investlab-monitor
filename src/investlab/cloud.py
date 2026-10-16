@@ -234,6 +234,44 @@ async def read_private_account():
         }
 
 
+async def read_private_history(limit=100):
+    """Read confirmed CNY valuation history from immutable private account storage.
+
+    Only exposes private values behind Vercel Authentication, never public demo.
+    No synthetic history or inferred investment returns are generated.
+    """
+    from investlab.core import connection
+
+    if not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ValueError("Invalid valuation history limit")
+    with tempfile.TemporaryDirectory(prefix="investlab-history-read-") as temporary:
+        home = Path(temporary) / "private"
+        if not await load_private_home(home):
+            return {"account_initialized": False, "history": [], "has_more": False}
+        await asyncio.to_thread(_check_account, home)
+        with connection(home, readonly=True) as db:
+            rows = db.execute(
+                "SELECT as_of, qqq_value_cny, tqqq_value_cny, "
+                "qld_value_cny, cash_cny, recorded_at, note "
+                "FROM portfolio_baselines ORDER BY rowid DESC LIMIT ?", (limit + 1,)
+            ).fetchall()
+        history = []
+        for row in rows[:limit]:
+            values = {key: str(row[column]) for key, column in (
+                ("QQQ", "qqq_value_cny"), ("TQQQ", "tqqq_value_cny"),
+                ("QLD", "qld_value_cny"), ("CASH", "cash_cny")
+            )}
+            history.append({
+                "as_of": row["as_of"], "recorded_at": row["recorded_at"],
+                "values": values, "total_value_cny": sum(int(v) for v in values.values()),
+                "note": row["note"],
+            })
+        return {
+            "account_initialized": True, "history": history,
+            "has_more": len(rows) > limit,
+        }
+
+
 async def append_private_valuation(values, as_of, note, expected_version):
     """Append a confirmed valuation without overwriting any historical snapshot.
 
