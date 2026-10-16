@@ -325,6 +325,11 @@ async def run_private_daily(*, expected_version=None):
                 report.update(status="SETUP_REQUIRED",issue_code="NO_PRIVATE_ACCOUNT_SNAPSHOT")
                 return report
             result = await asyncio.to_thread(_compute, home)
+            if expected_version is not None:
+                objects = await _list("state/")
+                names = sorted(o.pathname for o in objects if o.pathname.endswith(".zip"))
+                if not names or names[-1] != expected_version:
+                    raise ValueError("Account version changed during run; computed state not saved")
             saved = await save_private_home(home)
             report.update(result, state_version=saved)
         except Exception as exc:
