@@ -207,6 +207,26 @@ async def probe_private_recovery(*, limit=2):
     }
 
 
+async def load_calculated_home(home, report, *, expected_account_version):
+    """Open immutable research output only if it belongs to latest confirmed account."""
+    import re
+    name = report.get("computed_version")
+    if not isinstance(name, str) or not re.fullmatch(
+        r"computed/[0-9]{8}T[0-9]{12}Z-[0-9a-f]{32}\.zip", name
+    ):
+        raise ValueError("Missing scheduled calculation snapshot")
+    if report.get("account_state_version") != expected_account_version:
+        raise ValueError("Scheduled calculation belongs to an older account valuation")
+    objects = await _list("state/")
+    states = sorted(item.pathname for item in objects if item.pathname.endswith(".zip"))
+    if not states or states[-1] != expected_account_version:
+        raise ValueError("Confirmed account changed during scheduled report read")
+    raw = await _read(name)
+    _restore_archive(home, raw)
+    await asyncio.to_thread(_check_account, home)
+    return True
+
+
 async def private_account_verified():
     """Read and validate actual private state; no inference from missing run reports.
 
