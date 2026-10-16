@@ -35,6 +35,16 @@
 
 未设置真实账户或管理密钥时，不开放账户输入。云端不会通过 ChatGPT Alpaca 插件复用你的登录权限，也不会执行任何真实/模拟交易。
 
+## 首次初始化：受保护网页
+
+完成 Vercel 身份登录后，打开 `https://investlab-cloud.vercel.app/setup`。网页首先只读检查 `/api/status`；仅当私有 Blob 检查确认 `SETUP_REQUIRED` 且 `storage_verified:true` 时允许提交一次性初始化。
+
+填写经过账户持有人确认的日期、QQQ/TQQQ/QLD/现金人民币整数估值和来源说明，在密码栏输入 Vercel Production 环境中的 `INVESTLAB_ADMIN_TOKEN`。**管理令牌不能通过聊天、GitHub、URL 参数或公开表单传递**。网页不会把令牌写入浏览器存储；只经同源 HTTPS POST 提交给后端。
+
+服务器保存新版本的私有 Blob 后，立即下载并重新校验快照 ZIP 的 SHA256 与 SQLite 基线，逐项比较日期、各项金额和合计。只有回读完全匹配，才返回 `INITIALIZED` + `readback.verified:true`。浏览器还会独立重新请求 `/api/status`；两重检查通过才提示“持久化验证成功”。失败或网络中断后先查 `/api/status`，不要重复提交。已存在账户时禁止覆盖。
+
+**注意**：登录保护和管理令牌属于两个独立的权限控制；网页不读取或显示既有管理密钥。管理令牌不可访问时由账户所有人在 Vercel 环境设置中安全轮换，且需要使变更作用于新部署。初始化仅保存账户估值，绝不生成交易或启用 Cron。
+
 ## 部署与验收
 
 1. 创建独立 Vercel 私有项目并开启 Vercel Authentication。
