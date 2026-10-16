@@ -101,6 +101,9 @@
     $("decision-proof-status").parentElement.dataset.verified=String(actionable);
     setText("decision-session",b&&b.report_session?dateText(b.report_session):"待核验");
     setText("decision-account-date",state.account&&state.account.account_initialized?dateText(state.account.as_of):"未保存");
+    const actualPortfolio=state.account&&state.account.account_initialized===true;
+    setText("decision-proof-total",actualPortfolio?amount(total(state.account)):"—");
+    setText("decision-proof-total-date",actualPortfolio?"已确认估值日 "+dateText(state.account.as_of):"尚未读取真实资产");
     setText("decision-evidence",verified?"在线核验通过":"待通过");
     setText("decision-applicable",actionable?"与当前账户一致":b&&b.status==="ACCOUNT_MISMATCH"?"需更新结论":"不生成交易建议");
     const tickets=$("decision-action-tickets");clear(tickets);
