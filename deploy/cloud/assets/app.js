@@ -321,11 +321,23 @@
       for(const [name,color] of [["上：当前占比","#92aaff"],["下：策略目标","#6cbeac"]]){const node=element("span");const dot=element("i","legend-color");dot.style.background=color;node.appendChild(dot);node.appendChild(document.createTextNode(name));key.appendChild(node);}box.appendChild(key);
     }
     const risk=$("risk-report");clear(risk);
-    const report=state.report&&reportQuality()?state.report:null;
+    const trusted=state.brief&&state.brief.actionable===true&&state.brief.status==="ACTION_REVIEW"&&reportQuality();
+    const metrics=trusted&&state.brief.metrics?state.brief.metrics:{};
+    const actualExposure=v&&sum>0?
+      100*(number(v.QQQ)+3*number(v.TQQQ)+2*number(v.QLD))/sum:null;
+    const verifiedVol=typeof metrics.qqq_vol20_pct==="number"?
+      percent(metrics.qqq_vol20_pct):"等待有效模型报告";
+    const modelVol=typeof metrics.risk_annual_volatility==="number"?
+      percent(metrics.risk_annual_volatility*100):"等待有效模型报告";
+    const riskShare=typeof metrics.risk_tqqq_variance_share==="number"?
+      percent(metrics.risk_tqqq_variance_share*100):"等待有效模型报告";
     const rows=[
-      {label:"策略目标股票敞口",value:"参考 180%",detail:"60% QQQ + 40% TQQQ 的每日目标名义杠杆，非当前真实敞口"},
-      {label:"模型估计年化波动率",value:report&&Number.isFinite(Number(report.risk&&report.risk.annual_volatility))&&report.risk.annual_volatility!=null?percent(Number(report.risk.annual_volatility)*100):"等待行情验证",detail:"模型估计值，不代表未来一定发生"},
-      {label:"TQQQ 方差风险贡献",value:report&&Number.isFinite(Number(report.risk&&report.risk.tqqq_variance_share))&&report.risk.tqqq_variance_share!=null?percent(Number(report.risk.tqqq_variance_share)*100):"等待行情验证",detail:"仅供组合研究；需验证的行情报告"}
+      {label:"当前名义纳指敞口",value:actualExposure!==null?percent(actualExposure):"—",
+       detail:"按已确认 QQQ×1 + QLD×2 + TQQQ×3 的当日倍数粗算，不是实际收益率"},
+      {label:"60/40 目标参考敞口",value:"180%",detail:"这是战略目标的每日名义敞口，不代表你现在的持仓"},
+      {label:"QQQ 20 日年化波动",value:verifiedVol,detail:"来自本轮有效策略复核；行情不合格时不展示旧数值"},
+      {label:"目标组合估计年化波动",value:modelVol,detail:"基于历史行情的模型估计，不预测未来收益"},
+      {label:"TQQQ 对目标组合的方差风险贡献",value:riskShare,detail:"参考模型风险贡献；不等于当前账户的真实风险占比"}
     ];
     for(const row of rows){const div=element("div","risk-metric");div.appendChild(element("span","",row.label));div.appendChild(element("strong","",row.value));div.appendChild(element("small","",row.detail));risk.appendChild(div);}
   }
