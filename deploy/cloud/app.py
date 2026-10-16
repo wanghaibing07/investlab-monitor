@@ -157,6 +157,19 @@ async def private_account():
                              "error_type":type(exc).__name__},status_code=503)
 
 
+@app.get("/api/history")
+async def valuation_history():
+    """Read private confirmed valuation snapshots for the dashboard."""
+    if not _configured():
+        raise HTTPException(503, "Private Blob storage unavailable")
+    try:
+        return await cloud.read_private_history(limit=100)
+    except Exception as exc:
+        return JSONResponse({
+            "status": "HISTORY_ERROR", "error_type": type(exc).__name__
+        }, status_code=503)
+
+
 async def _confirmed_valuation(request: Request, *, update=False):
     # Vercel Authentication protects all project routes, including write APIs.
     # An additional user-entered administrator secret is deliberately not used.
