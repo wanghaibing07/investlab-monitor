@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 
-from investlab import cloud, service
+from investlab import automation, cloud, service
 from investlab.core import utcnow
 
 app = FastAPI(title="InvestLab private cloud", docs_url=None, redoc_url=None, openapi_url=None)
@@ -131,7 +131,18 @@ async def latest():
         raise HTTPException(503,"Private storage unavailable")
     with tempfile.TemporaryDirectory(prefix="investlab-cloud-read-") as tmp:
         home_dir = Path(tmp)/"private"
-        if not await cloud.load_private_home(home_dir):
+        receipt = await cloud.latest_json("runs")
+        if receipt and receipt.get("status") == "SUCCEEDED" and receipt.get("computed_version"):
+            account = await cloud.read_private_account()
+            if not account.get("account_initialized"):
+                return JSONResponse({"status":"SETUP_REQUIRED"},status_code=404)
+            try:
+                await cloud.load_calculated_home(home_dir, receipt,
+                    expected_account_version=account["state_version"])
+            except Exception as exc:
+                return JSONResponse({"status":"REPORT_ACCOUNT_MISMATCH",
+                    "failure_type":type(exc).__name__},status_code=409)
+        elif not await cloud.load_private_home(home_dir):
             return JSONResponse({"status":"SETUP_REQUIRED", "account_initialized":False},status_code=404)
         try:
             report = service.latest(home_dir)
@@ -162,7 +173,10 @@ async def investment_brief():
         if account.get("account_initialized") is True:
             with tempfile.TemporaryDirectory(prefix="investlab-brief-") as tmp:
                 private = Path(tmp) / "private"
-                if not await cloud.load_private_home(private):
+                if latest_run and latest_run.get("status") == "SUCCEEDED" and latest_run.get("computed_version"):
+                    await cloud.load_calculated_home(private, latest_run,
+                        expected_account_version=account["state_version"])
+                elif not await cloud.load_private_home(private):
                     raise RuntimeError("Private account disappeared while loading")
                 review = service.latest(private)
         return decision_brief(account, latest_run, review)
@@ -355,5 +369,45 @@ async def daily_run(request: Request):
                              "trading_enabled": False}, status_code=503)
     if not _configured():
         raise HTTPException(503,"Private storage not configured")
-    result = await cloud.run_private_daily()
-    return JSONResponse(result,status_code=200 if result["status"]=="SUCCEEDED" else 503)
+    result = await automation.daily_primary()
+    return JSONResponse(result,status_code=200 if result["status"] in
+                        ("SUCCEEDED","ALREADY_VERIFIED","DUPLICATE_SUPPRESSED",
+                         "SKIPPED_CLOSED_SESSION") else 503)
+
+
+@app.get("/api/cron/watchdog")
+async def daily_watchdog(request: Request):
+    bearer = request.headers.get("authorization", "")
+    secret = bearer[7:] if bearer.startswith("Bearer ") else None
+    _require_secret(secret, "CRON_SECRET")
+    if os.environ.get("INVESTLAB_CRON_ENABLED") != "true":
+        return JSONResponse({"status":"DISABLED_BY_DEFAULT",
+                             "trading_enabled":False},status_code=503)
+    if not _configured():
+        raise HTTPException(503, "Private storage not configured")
+    result = await automation.daily_watchdog()
+    return JSONResponse(result,status_code=200 if result["status"] in
+                        ("SUCCEEDED","VERIFIED","ALREADY_VERIFIED",
+                         "SKIPPED_CLOSED_SESSION","DUPLICATE_SUPPRESSED") else 503)
+
+
+@app.get("/api/scheduler/status")
+async def daily_scheduler_status():
+    if not _configured():
+        raise HTTPException(503, "Private storage not configured")
+    try:
+        receipt = await cloud.latest_json("scheduled-receipts")
+        return {
+            "configured": os.environ.get("INVESTLAB_CRON_ENABLED") == "true",
+            "smtp_configured": all(os.environ.get(k) for k in
+                ("INVESTLAB_SMTP_HOST","INVESTLAB_SMTP_USER",
+                 "INVESTLAB_SMTP_PASSWORD","INVESTLAB_ALERT_TO")),
+            "last_session": receipt.get("scheduled_session") if receipt else None,
+            "last_result": receipt.get("status") if receipt else "NOT_YET_RUN",
+            "last_completed": receipt.get("completed_at") if receipt else None,
+            "trading_enabled": False,
+            "schedule_health_proven": False,
+        }
+    except Exception as exc:
+        return JSONResponse({"status":"SCHEDULER_STATUS_UNAVAILABLE",
+                             "failure_type":type(exc).__name__},status_code=503)
