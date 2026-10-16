@@ -79,6 +79,24 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotIn("secret token",json.dumps(result))
         save.assert_not_awaited()
 
+    def test_private_valuation_readback_checks_exact_amounts_and_date(self):
+        from types import SimpleNamespace
+        archive=cloud._make_archive(self.home)
+        async def listing(prefix):
+            return [SimpleNamespace(pathname="state/fixture.zip")]
+        with (patch("investlab.cloud._list",side_effect=listing),
+              patch("investlab.cloud._read",new=AsyncMock(return_value=archive))):
+            confirmed=asyncio.run(cloud.verify_private_valuation(
+                {"QQQ":"6000","TQQQ":"0","QLD":"0","CASH":"4000"},"2026-10-14"))
+            self.assertTrue(confirmed["verified"])
+            self.assertEqual(confirmed["total_value_cny"],10000)
+            with self.assertRaisesRegex(RuntimeError,"amounts"):
+                asyncio.run(cloud.verify_private_valuation(
+                    {"QQQ":"6100","TQQQ":"0","QLD":"0","CASH":"3900"},"2026-10-14"))
+            with self.assertRaisesRegex(RuntimeError,"date"):
+                asyncio.run(cloud.verify_private_valuation(
+                    {"QQQ":"6000","TQQQ":"0","QLD":"0","CASH":"4000"},"2026-10-15"))
+
     def test_private_account_verification_checks_real_restored_baseline(self):
         from types import SimpleNamespace
         archive = cloud._make_archive(self.home)
