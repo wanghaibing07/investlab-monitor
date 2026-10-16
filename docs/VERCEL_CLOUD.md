@@ -7,7 +7,7 @@
 - Vercel Python Functions / FastAPI：执行现有 `investlab.service.run`、审计、独立验证、已到期结果评价
 - Vercel 私有 Blob：把真实账户 SQLite 以**一致性备份**打包成不可覆写版本，保存完整快照；运行报告同样只写入私有不可覆写对象
 - Vercel Cron Jobs：在完成真实账户初始化、Cron 密钥及首次计算验收后启用，避免未配置时产生假的「每天运行成功」
-- Vercel Authentication：所有网站路径默认要求 Vercel 身份登录；账户创建另外需要管理密钥
+- Vercel Authentication：所有网站路径默认要求 Vercel 身份登录；账户创建和更新仅使用 Vercel 私有项目登录，无第二个管理令牌
 
 ## 真实账户状态的判定
 
@@ -30,28 +30,32 @@
 数据的性质：
 - `GET /health`：非敏感运行检查
 - `GET /api/status`：读取最近一条私有报告；不存在时明确 `SETUP_REQUIRED`
-- `POST /api/initialize`：一次性录入用户确认的人民币估值；必须额外提供管理令牌
+- `POST /api/initialize`：首次保存用户确认的人民币估值；需登录 Vercel 私有项目，且请求必须同源 HTTPS JSON
 - `GET /api/cron/daily`：必须提供 Vercel Cron Bearer Secret；它严格要求非演示账户、在线行情通过及独立验证
 
-未设置真实账户或管理密钥时，不开放账户输入。云端不会通过 ChatGPT Alpaca 插件复用你的登录权限，也不会执行任何真实/模拟交易。
+若未设置真实账户，账号管理网页允许登录后初始化；未登录的访客由 Vercel Authentication 拦截。云端不会通过 ChatGPT Alpaca 插件复用你的登录权限，也不会执行任何真实/模拟交易。
 
-## 首次初始化：受保护网页
+## 长期账户管理：一次登录，重复更新持仓估值
 
 完成 Vercel 身份登录后，打开 `https://investlab-cloud.vercel.app/setup`。网页首先只读检查 `/api/status`；仅当私有 Blob 检查确认 `SETUP_REQUIRED` 且 `storage_verified:true` 时允许提交一次性初始化。
 
-填写经过账户持有人确认的日期、QQQ/TQQQ/QLD/现金人民币整数估值和来源说明，在密码栏输入 Vercel Production 环境中的 `INVESTLAB_ADMIN_TOKEN`。**管理令牌不能通过聊天、GitHub、URL 参数或公开表单传递**。网页不会把令牌写入浏览器存储；只经同源 HTTPS POST 提交给后端。
+填写经过账户持有人确认的日期、QQQ/TQQQ/QLD/现金人民币整数估值和来源说明，点击「创建并保存账户」。无需填写任何管理令牌：**浏览器内登录已开启的 Vercel Authentication 才能访问页面和写入接口**，服务端还检查请求来源与 JSON 类型，阻止跨站提交。
 
-服务器保存新版本的私有 Blob 后，立即下载并重新校验快照 ZIP 的 SHA256 与 SQLite 基线，逐项比较日期、各项金额和合计。只有回读完全匹配，才返回 `INITIALIZED` + `readback.verified:true`。浏览器还会独立重新请求 `/api/status`；两重检查通过才提示“持久化验证成功”。失败或网络中断后先查 `/api/status`，不要重复提交。已存在账户时禁止覆盖。
+第一次初始化只写入真实账户快照。再次进入 `/setup` 会从私有 Blob 读取已经保存的估值和当前版本，允许修改日期、四项人民币金额和备注，再通过 `POST /api/valuation` 创建**新版本的不可覆盖快照**；历史记录仍在。旧页面发出的过期版本更新会返回 409 冲突，提示先重新读取。注意：Blob 不是有事务锁的数据库，**不要同时在多个浏览器或定时任务写入**；当前未启用 Cron，正式允许并发前需要数据库事务锁。
 
-**注意**：登录保护和管理令牌属于两个独立的权限控制；网页不读取或显示既有管理密钥。管理令牌不可访问时由账户所有人在 Vercel 环境设置中安全轮换，且需要使变更作用于新部署。初始化仅保存账户估值，绝不生成交易或启用 Cron。
+后端保存私有 Blob 后，重新下载 ZIP 快照、校验 SHA256 和 SQLite，并逐项核对账户金额、估值日期和合计；页面还会独立读取 `GET /api/account`，两次核实后才提示持久化成功。出现错误时先刷新查询账户，避免重复提交。更新估值不会自动生成股票成交或发出交易指令。
+
+**部署访问权限很重要**：Vercel Authentication 所授权的任何项目访问者（包括你主动授予 Viewer 的成员或分享部署链接的持有者）都可能打开这个私人后台。去掉第二个管理令牌后，**必须将该项目的部署访问权限制为你自己**，不要创建分享链接或自动化绕过密钥；定期审计 `Security → Deployment Protection` 的访问成员、共享链接与绕过设置。项目需一直保持 `ssoProtection.deploymentType: all`。关闭项目登录保护会让修改接口缺少身份验证，不得关闭。后端校验请求来源不能替代真正的身份认证。
+
+
 
 ## 部署与验收
 
 1. 创建独立 Vercel 私有项目并开启 Vercel Authentication。
 2. 连接私有 Blob 存储（不能是 public）。
-3. 设置生产环境 `CRON_SECRET` 和 `INVESTLAB_ADMIN_TOKEN`；值从安全随机源生成，不上传仓库。
+3. 仅保留系统内部的 `CRON_SECRET`（未来 Cron 使用），以及私有 Blob 连接凭据；账户页面不再使用 `INVESTLAB_ADMIN_TOKEN`。
 4. 将打包分支 `vercel-cloud` 部署到私有项目，并验证匿名访问被 Vercel 拦截。
-5. 首次账户录入需要私有身份登录以及管理令牌；保存后验证 Blob 私有版本。
+5. 首次账户录入只需私有 Vercel 身份登录；保存后验证 Blob 私有版本，日后仍可新增估值快照。
 6. 首次执行通过并核对数据库恢复、报告与数据质量，再开启 `crons` 调度。
 7. 真实连续交易日的 Cron 送达、失败告警、重试和外部价格核对仍需实测。
 
