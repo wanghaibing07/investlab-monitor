@@ -514,11 +514,36 @@
       showToast("本次监控未验收成功："+e.message+"。请先查看运行状态，不要立即重复运行。",true);
     }finally{state.mutating=false;busyButton(btn,false,"确认运行");await loadAll();window.location.hash="runs";}
   }
+  async function checkRecovery(){
+    const btn=$("check-recovery"),out=$("recovery-result");
+    if(!btn||!out||btn.disabled)return;
+    btn.disabled=true;
+    out.textContent="正在隔离校验最近两份私有快照…";
+    try{
+      const data=await api("/api/recovery");
+      if(data.current_restorable===true){
+        out.textContent=data.older_restorable===true?
+          "最新和上一份快照均通过恢复校验（仅同一存储）。独立备份与自动恢复尚未验证。":
+          "最新快照可恢复，但未验证上一份有效快照。独立备份与自动恢复尚未验证。";
+      }else{
+        out.textContent="最新快照未通过恢复校验。请保留现有版本，停止并发更新并人工排查。";
+      }
+    }catch(error){
+      if(error.payload&&error.payload.status==="CURRENT_SNAPSHOT_NOT_RESTORABLE"){
+        out.textContent="最新快照恢复失败"+(error.payload.older_restorable===true?"；上一份有效，但不会自动回退。":"，且尚无确认可用的旧版本。")+"请先人工核对。";
+      }else if(error.payload&&error.payload.status==="NO_ACCOUNT_SNAPSHOTS"){
+        out.textContent="尚无已确认的账户快照，无法验证恢复。";
+      }else{
+        out.textContent="恢复检查未完成，不能据此认定备份可用。请检查登录或存储状态。";
+      }
+    }finally{btn.disabled=false;}
+  }
   function wire(){
     window.addEventListener("hashchange",navigate);navigate();
     $("mobile-menu").addEventListener("click",()=>{const open=!$("sidebar").classList.contains("is-open");$("sidebar").classList.toggle("is-open",open);$("mobile-scrim").hidden=!open;$("mobile-menu").setAttribute("aria-expanded",String(open));});
     $("mobile-scrim").addEventListener("click",()=>{$("sidebar").classList.remove("is-open");$("mobile-scrim").hidden=true;$("mobile-menu").setAttribute("aria-expanded","false");});
     $("refresh-button").addEventListener("click",loadAll);$("error-retry").addEventListener("click",loadAll);
+    $("check-recovery").addEventListener("click",checkRecovery);
     for(const b of $$("[data-open-editor]"))b.addEventListener("click",openEditor);
     for(const b of $$("[data-open-run]"))b.addEventListener("click",openRun);
     for(const b of $$("[data-close-dialog]"))b.addEventListener("click",()=>closeModal(b.closest("dialog")));
