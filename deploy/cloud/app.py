@@ -103,9 +103,7 @@ button:disabled{opacity:.55}p{color:#b9cee1}a{color:#8ed2ed}#result{white-space:
 <label for="qld">QLD 人民币估值（整数元）</label><input id="qld" type="number" min="0" max="999999999999" step="1" required>
 <label for="cash">现金人民币估值（整数元）</label><input id="cash" type="number" min="0" max="999999999999" step="1" required>
 <label for="note">估值来源说明（5 至 160 字）</label><input id="note" maxlength="160" minlength="5" required placeholder="持有人根据账户明细确认估值">
-<label for="token">管理令牌（INVESTLAB_ADMIN_TOKEN）</label>
-<input id="token" type="password" required autocomplete="off" spellcheck="false">
-<p class="small">令牌仅随此网页的 HTTPS 初始化请求发送，不写入报告、浏览器本地存储或网页地址。请从 Vercel 项目私有环境变量中获取，不要发到聊天中。</p>
+<p class="small">只需登录有权限的 Vercel 私有项目；不使用第二个管理令牌。请不要共享受保护部署的访问链接。</p>
 <label class="check"><input id="confirmed" type="checkbox" required>我已核实以上金额及日期，确认保存本次账户估值</label>
 <button id="submit" type="submit" disabled>保存账户估值</button></form>
 <pre id="result" role="status" aria-live="polite"></pre>
