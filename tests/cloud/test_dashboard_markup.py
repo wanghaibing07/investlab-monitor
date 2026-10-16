@@ -112,6 +112,8 @@ class DashboardMarkupTests(unittest.TestCase):
             "historical-signal-title",
             "historical-signal-description",
             "decision-proof-status",
+            "decision-proof-total",
+            "decision-proof-total-date",
             "decision-session",
         ):
             self.assertIn(anchor, self.parser.ids, anchor)
