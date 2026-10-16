@@ -101,6 +101,30 @@ class DashboardMarkupTests(unittest.TestCase):
         self.assertNotIn("eval(", self.js)
         self.assertNotIn("localStorage.", self.js)
 
+    def test_decision_first_user_can_find_evidence_action_and_history(self):
+        for anchor in (
+            "decision-workbench",
+            "decision-headline",
+            "decision-next-step",
+            "decision-allocation",
+            "decision-allocation-rows",
+            "historical-signal",
+            "historical-signal-title",
+            "historical-signal-description",
+            "decision-proof-status",
+            "decision-session",
+        ):
+            self.assertIn(anchor, self.parser.ids, anchor)
+        self.assertIn("function renderDecisionAllocation", self.js)
+        self.assertIn("function renderHistoricalSignal", self.js)
+        self.assertIn("Number.isSafeInteger(step.estimated_difference_cny)", self.js)
+        self.assertIn("历史模型观察", self.html)
+        self.assertIn("不是", self.html + self.js)
+        self.assertNotIn("Math.random", self.js)
+        self.assertNotIn("localStorage", self.js)
+        self.assertIn(".decision-allocation-row", self.css + (ROOT / "decision.css").read_text(encoding="utf-8"))
+        self.assertIn("不自动下单", self.html)
+
     def test_responsive_accessible_states_exist(self):
         self.assertIn("@media(max-width:880px)", self.css)
         self.assertIn("@media(max-width:640px)", self.css)
