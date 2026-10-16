@@ -172,15 +172,20 @@ async def daily_watchdog():
     session = nyse_session()
     if session is None:
         return {"status": "SKIPPED_CLOSED_SESSION", "trading_enabled": False}
-    receipt = await _last_receipt()
-    account = await cloud.read_private_account()
-    if receipt and receipt.get("scheduled_session") == session and \
-            receipt.get("status") == "SUCCEEDED" and \
-            receipt.get("account_state_version") == account.get("state_version"):
-        return {"status": "VERIFIED", "scheduled_session": session,
-                "trading_enabled": False}
-    result = await execute_once("retry", current_session=session)
-    if result.get("status") in ("SUCCEEDED", "ALREADY_VERIFIED"):
+    try:
+        receipt = await _last_receipt()
+        account = await cloud.read_private_account()
+        if receipt and receipt.get("scheduled_session") == session and \
+                receipt.get("status") == "SUCCEEDED" and \
+                receipt.get("account_state_version") == account.get("state_version"):
+            return {"status": "VERIFIED", "scheduled_session": session,
+                    "trading_enabled": False}
+        result = await execute_once("retry", current_session=session)
+    except Exception as exc:
+        result = {"status": "FAILED", "scheduled_session": session,
+                  "issue_code": "WATCHDOG_OR_STORAGE_FAILED",
+                  "failure_type": type(exc).__name__, "trading_enabled": False}
+    if result.get("status") in ("SUCCEEDED", "ALREADY_VERIFIED", "DUPLICATE_SUPPRESSED"):
         return result
     try:
         email_status = await asyncio.to_thread(_send_failure_email, result)
