@@ -20,5 +20,15 @@
         }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/daily",
+      "schedule": "0 0 * * 2-6"
+    },
+    {
+      "path": "/api/cron/watchdog",
+      "schedule": "0 3 * * 2-6"
+    }
   ]
 }

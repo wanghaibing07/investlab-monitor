@@ -514,6 +514,27 @@
       showToast("本次监控未验收成功："+e.message+"。请先查看运行状态，不要立即重复运行。",true);
     }finally{state.mutating=false;busyButton(btn,false,"确认运行");await loadAll();window.location.hash="runs";}
   }
+  async function loadSchedulerState(){
+    const out=$("scheduler-state"),alert=$("scheduler-alert-state");
+    if(!out||!alert)return;
+    out.textContent="正在查询每日运行记录…";
+    try{
+      const x=await api("/api/scheduler/status");
+      const status=x.last_result==="SUCCEEDED"?
+        "上次运行已通过":x.last_result==="NOT_YET_RUN"?
+        "尚无每日任务运行记录":x.last_result==="FAILED"?
+        "上次自动监控失败":"最近状态："+String(x.last_result||"UNKNOWN");
+      out.textContent=(x.configured?"定时功能已配置。":"定时执行尚未启用。")+
+        " "+status+(x.last_session?"（美股 "+x.last_session+"）":"")+
+        "。只有连续实际运行记录才能证明长期稳定。";
+      alert.textContent=x.smtp_configured?
+        "故障邮件已配置；是否实际送达，需要进行一次通知测试。":
+        "故障邮件尚未配置，运行失败不会自动发邮件。";
+    }catch(error){
+      out.textContent="未能读取调度状态，不代表已启用。请检查登录和云端运行状态。";
+      alert.textContent="邮件通知状态未知。";
+    }
+  }
   async function checkRecovery(){
     const btn=$("check-recovery"),out=$("recovery-result");
     if(!btn||!out||btn.disabled)return;
@@ -544,6 +565,7 @@
     $("mobile-scrim").addEventListener("click",()=>{$("sidebar").classList.remove("is-open");$("mobile-scrim").hidden=true;$("mobile-menu").setAttribute("aria-expanded","false");});
     $("refresh-button").addEventListener("click",loadAll);$("error-retry").addEventListener("click",loadAll);
     $("check-recovery").addEventListener("click",checkRecovery);
+    $("refresh-scheduler-status").addEventListener("click",loadSchedulerState);
     for(const b of $$("[data-open-editor]"))b.addEventListener("click",openEditor);
     for(const b of $$("[data-open-run]"))b.addEventListener("click",openRun);
     for(const b of $$("[data-close-dialog]"))b.addEventListener("click",()=>closeModal(b.closest("dialog")));
@@ -552,5 +574,5 @@
     $("valuation-form").addEventListener("submit",submitValuation);$("confirm-run").addEventListener("click",submitRun);
     window.addEventListener("beforeunload",event=>{if(state.mutating){event.preventDefault();event.returnValue="";}});
   }
-  wire();loadAll();
+  wire();loadAll();loadSchedulerState();
 })();

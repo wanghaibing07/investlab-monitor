@@ -61,7 +61,7 @@ class RecoveryAndCronTests(unittest.TestCase):
         with (patch.dict(os.environ, {
                 "CRON_SECRET": secret, "BLOB_READ_WRITE_TOKEN": "test-blob",
                 "INVESTLAB_CRON_ENABLED": "false"}),
-              patch("investlab.cloud.run_private_daily",
+              patch("investlab.automation.daily_primary",
                     new=AsyncMock()) as run):
             wrong = self.client.get("/api/cron/daily",
                                     headers={"Authorization": "Bearer wrong"})
@@ -77,13 +77,42 @@ class RecoveryAndCronTests(unittest.TestCase):
         with (patch.dict(os.environ, {
                 "CRON_SECRET": secret, "BLOB_READ_WRITE_TOKEN": "test-blob",
                 "INVESTLAB_CRON_ENABLED": "true"}),
-              patch("investlab.cloud.run_private_daily",
+              patch("investlab.automation.daily_primary",
                     new=AsyncMock(return_value={"status": "SUCCEEDED", "trading_enabled": False})) as run):
             response = self.client.get("/api/cron/daily",
                                        headers={"Authorization": f"Bearer {secret}"})
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["trading_enabled"])
         run.assert_awaited_once()
+
+
+    def test_watchdog_requires_secret_and_explicit_enable(self):
+        secret = "z" * 48
+        with (patch.dict(os.environ, {
+                "CRON_SECRET": secret, "BLOB_READ_WRITE_TOKEN": "test-blob",
+                "INVESTLAB_CRON_ENABLED": "false"}),
+              patch("investlab.automation.daily_watchdog",
+                    new=AsyncMock()) as watch):
+            self.assertEqual(self.client.get("/api/cron/watchdog").status_code,401)
+            blocked=self.client.get("/api/cron/watchdog",
+                                    headers={"Authorization": f"Bearer {secret}"})
+            self.assertEqual(blocked.status_code,503)
+            watch.assert_not_awaited()
+
+    def test_watchdog_uses_verified_receipt_and_never_executes_trading(self):
+        secret="z"*48
+        with (patch.dict(os.environ, {
+                "CRON_SECRET":secret, "BLOB_READ_WRITE_TOKEN":"test-blob",
+                "INVESTLAB_CRON_ENABLED":"true"}),
+              patch("investlab.automation.daily_watchdog",
+                    new=AsyncMock(return_value={"status":"VERIFIED",
+                                                 "trading_enabled":False})) as watch):
+            resp=self.client.get("/api/cron/watchdog",
+                                  headers={"Authorization":f"Bearer {secret}"})
+        self.assertEqual(resp.status_code,200)
+        self.assertFalse(resp.json()["trading_enabled"])
+        watch.assert_awaited_once()
+
 
 
 if __name__ == "__main__":
