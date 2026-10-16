@@ -77,6 +77,9 @@ function handler(req, res) {
       { status: "READY_FOR_FIRST_RUN", account_initialized: true, storage_verified: true,
         latest_run_exists: false, execution_enabled: false },
     "/api/history": empty ? { history: [] } : fakeHistory,
+    "/api/recovery": empty ? { status: "NO_ACCOUNT_SNAPSHOTS", current_restorable: false, older_restorable: false } :
+      { status: "TWO_IN_STORE_SNAPSHOTS_RESTORABLE", current_restorable: true, older_restorable: true,
+        independent_backup_verified: false, automatic_recovery_verified: false },
     "/api/brief": {
       status: empty ? "NEEDS_ACCOUNT" : "NEEDS_VERIFIED_RUN",
       headline: empty ? "尚未保存账户" : "等待首次真实行情核验",
@@ -149,6 +152,14 @@ async function inspect(browser, base, scenario, vp) {
         await page.locator("#run-dialog [data-close-dialog]").first().click();
         assert.equal(await page.locator("#run-dialog").evaluate(el => el.open), false,
           label + " confirmation did not close");
+        if (vp.name === "mobile") await page.locator("#mobile-menu").click();
+        await page.locator('.nav-item[data-route="settings"]').click();
+        await page.locator('[data-page="settings"]').waitFor({ state: "visible", timeout: 5000 });
+        await page.locator("#check-recovery").click();
+        await page.getByText("最新和上一份快照均通过恢复校验", { exact: false }).waitFor({ state: "visible", timeout: 5000 });
+        assert.match(await page.locator("#recovery-result").innerText(), /独立备份.*尚未验证/);
+        await page.screenshot({ path: path.join(OUT, label + "-recovery.png"),
+          fullPage: true, animations: "disabled" });
       }
     }
     assert.deepEqual(errors, [], label + " JavaScript runtime exceptions");
