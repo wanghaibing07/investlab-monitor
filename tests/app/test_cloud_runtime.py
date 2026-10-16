@@ -60,7 +60,7 @@ class SnapshotTests(unittest.TestCase):
             cloud._check_account(demo)
 
     def test_failure_stores_status_but_not_updated_account_state(self):
-        async def load(home):
+        async def load(home, *, expected_version=None):
             service.init(home,False)
             with connection(home) as c:
                 c.execute(
@@ -142,6 +142,39 @@ class SnapshotTests(unittest.TestCase):
                     "2026-10-15","Owner confirmed latest", "state/stale.zip"))
         read.assert_not_awaited()
         write.assert_not_awaited()
+
+    def test_private_history_reads_confirmed_snapshot_without_synthetic_data(self):
+        from types import SimpleNamespace
+        archive=cloud._make_archive(self.home)
+        with (patch("investlab.cloud._list",new=AsyncMock(return_value=[
+                SimpleNamespace(pathname="state/confirmed.zip")])),
+              patch("investlab.cloud._read",new=AsyncMock(return_value=archive))):
+            result=asyncio.run(cloud.read_private_history(limit=100))
+        self.assertTrue(result["account_initialized"])
+        self.assertEqual(len(result["history"]),1)
+        self.assertEqual(result["history"][0]["as_of"],"2026-10-14")
+        self.assertEqual(result["history"][0]["values"],
+                         {"QQQ":"6000","TQQQ":"0","QLD":"0","CASH":"4000"})
+        self.assertEqual(result["history"][0]["total_value_cny"],10000)
+        self.assertFalse(result["has_more"])
+
+    def test_private_history_no_account_returns_empty_not_demo(self):
+        with patch("investlab.cloud._list",new=AsyncMock(return_value=[])):
+            result=asyncio.run(cloud.read_private_history())
+        self.assertFalse(result["account_initialized"])
+        self.assertEqual(result["history"],[])
+
+    def test_manual_monitor_rejects_stale_account_without_computation(self):
+        with (patch("investlab.cloud.load_private_home",
+                    new=AsyncMock(side_effect=ValueError("Stale account"))) as load,
+              patch("investlab.cloud._compute") as compute,
+              patch("investlab.cloud.save_private_report",
+                    new=AsyncMock(return_value="runs/stale.json"))):
+            result=asyncio.run(cloud.run_private_daily(expected_version="state/old.zip"))
+        self.assertEqual(result["status"],"FAILED")
+        self.assertEqual(result["failure_type"],"ValueError")
+        compute.assert_not_called()
+        load.assert_awaited_once()
 
     def test_private_valuation_readback_checks_exact_amounts_and_date(self):
         from types import SimpleNamespace
