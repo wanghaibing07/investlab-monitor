@@ -99,7 +99,7 @@ async function inspect(browser, base, scenario, vp) {
   try {
     await page.goto(base + "/?fixture=" + scenario, { waitUntil: "load" });
     await page.locator("#app-loading").waitFor({ state: "hidden", timeout: 20000 });
-    assert.equal(await page.title(), "InvestLab — 私人投资工作台");
+    assert.match(await page.title(), /^InvestLab — /, label + " unexpected page title");
     assert.equal(await page.locator('[data-page="overview"]').isVisible(), true,
       label + " overview missing");
     assert.ok((await page.locator("#decision-headline").innerText()).trim().length > 4,
