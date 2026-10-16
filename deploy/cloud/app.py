@@ -200,6 +200,27 @@ async def valuation_history():
         }, status_code=503)
 
 
+@app.get("/api/recovery")
+async def private_recovery_probe():
+    """Read-only restoration rehearsal. Vercel Authentication protects this route."""
+    if not _configured():
+        raise HTTPException(503, "Private storage unavailable")
+    try:
+        result = await cloud.probe_private_recovery(limit=2)
+        if result["current_restorable"]:
+            return result
+        return JSONResponse(result, status_code=503)
+    except Exception as exc:
+        return JSONResponse({
+            "status": "RECOVERY_PROBE_FAILED",
+            "current_restorable": False,
+            "older_restorable": False,
+            "independent_backup_verified": False,
+            "automatic_recovery_verified": False,
+            "failure_type": type(exc).__name__,
+        }, status_code=503)
+
+
 async def _confirmed_valuation(request: Request, *, update=False):
     # Vercel Authentication protects all project routes, including write APIs.
     # An additional user-entered administrator secret is deliberately not used.
@@ -329,6 +350,9 @@ async def daily_run(request: Request):
     bearer = request.headers.get("authorization", "")
     secret = bearer[7:] if bearer.startswith("Bearer ") else None
     _require_secret(secret, "CRON_SECRET")
+    if os.environ.get("INVESTLAB_CRON_ENABLED") != "true":
+        return JSONResponse({"status": "DISABLED_BY_DEFAULT", "execution_enabled": False,
+                             "trading_enabled": False}, status_code=503)
     if not _configured():
         raise HTTPException(503,"Private storage not configured")
     result = await cloud.run_private_daily()
