@@ -137,6 +137,8 @@ def _restore_archive(home, raw):
         members = {item.filename: item for item in contents}
         if len(members) != len(contents):
             raise ValueError("Duplicate private snapshot entry")
+        if not (STATE_FILES | {"manifest.json"}).issubset(members):
+            raise ValueError("Unrecognized private snapshot contents")
         if sum(v.file_size for v in members.values()) > MAX_UNPACKED_BYTES:
             raise ValueError("Private snapshot expands beyond safe limit")
         manifest = json.loads(z.read("manifest.json"))
