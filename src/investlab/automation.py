@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import smtplib
+import re
 import sys
 import tempfile
 from zoneinfo import ZoneInfo
@@ -106,6 +107,22 @@ def _failure_category(exc):
     return "RESEARCH_EXECUTION_FAILED"
 
 
+
+def _audit_failure_checks(exc):
+    """Read only whitelisted check labels/counters from a caught audit exception."""
+    detail = str(exc)
+    prefix = "证据审计未通过:"
+    if not detail.startswith(prefix):
+        return []
+    parts = detail[len(prefix):].strip().split(";")
+    checks = []
+    for raw in parts[:20]:
+        item = raw.strip()
+        if re.fullmatch(r"[A-Za-z][A-Za-z0-9_.:-]{0,90}(?:=[0-9]+)?", item):
+            checks.append(item)
+    return checks[:12]
+
+
 def _market_failure_facts(home):
     """Read a temporary worker's saved fetch details, never portfolio values."""
     file = Path(home) / "data" / "last_online_attempt.json"
@@ -162,6 +179,7 @@ async def diagnose_readonly():
                 "scheduled_session": nyse_session(),
                 "failure_category": _failure_category(exc),
                 "failure_type": type(exc).__name__,
+                "failed_audit_checks": _audit_failure_checks(exc),
                 "market": _market_failure_facts(home),
                 "qualified_online": False,
                 "trading_enabled": False,
@@ -214,6 +232,7 @@ async def execute_once(attempt="primary", *, current_session=None):
         report.update(status="FAILED", issue_code="SCHEDULED_RESEARCH_FAILED",
                       failure_type=type(exc).__name__,
                       failure_category=_failure_category(exc),
+                      failed_audit_checks=_audit_failure_checks(exc),
                       qualified_online=False)
     try:
         return await _persist_receipt(report)
