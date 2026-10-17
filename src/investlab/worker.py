@@ -29,6 +29,9 @@ def main():
         saved = m.save_report(report)
         result = {"run_id": saved["run_id"], "mode": report["mode"], "report": report,
                   "backup": saved["database_backup"]}
+    elif command == "recover-research-evidence":
+        from research.recovery import recover_verified_mature_snapshots
+        result = recover_verified_mature_snapshots(m.DB)
     elif command == "audit":
         result = m.audit()
     elif command == "refresh":

@@ -11,6 +11,7 @@ from pathlib import Path
 import hashlib
 import io
 import json
+import re
 import os
 import sqlite3
 import tempfile
@@ -82,26 +83,44 @@ async def latest_json(prefix):
     return data
 
 
+MATURE_SNAPSHOT_PREFIX = "data/quant53/mature_snapshots/"
+MATURE_SNAPSHOT_NAME = re.compile(r"^[0-9a-f]{64}\.json$")
+MAX_MATURE_SNAPSHOTS = 128
+
+
 def _make_archive(home):
-    """Backup the SQLite connection rather than copying a WAL-backed database."""
+    """Back up SQLite plus content-addressed research evidence (format 2)."""
     home = Path(home)
     database = home / "data/monitor.sqlite3"
     settings = home / "settings.json"
     if not settings.is_file() or not database.is_file():
         raise ValueError("No initialized private account state")
+    snapshot_dir = home / MATURE_SNAPSHOT_PREFIX
+    snapshots = sorted(snapshot_dir.glob("*.json")) if snapshot_dir.exists() else []
+    if len(snapshots) > MAX_MATURE_SNAPSHOTS:
+        raise ValueError("Too many research evidence snapshots")
+    for path in snapshots:
+        if not MATURE_SNAPSHOT_NAME.fullmatch(path.name) or not path.is_file():
+            raise ValueError("Invalid research evidence snapshot name")
     with tempfile.TemporaryDirectory() as tmp:
         copied = Path(tmp) / "monitor.sqlite3"
         with sqlite3.connect(database) as source, sqlite3.connect(copied) as dest:
             source.backup(dest)
         manifest = {
-            "schema_version": 1, "created_at": now(),
+            "schema_version": 2, "created_at": now(),
             "settings_sha256": hashlib.sha256(settings.read_bytes()).hexdigest(),
             "sqlite_sha256": hashlib.sha256(copied.read_bytes()).hexdigest(),
+            "research_evidence_sha256": {},
         }
         output = io.BytesIO()
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as z:
             z.write(settings, "settings.json")
             z.write(copied, "data/monitor.sqlite3")
+            for file in snapshots:
+                member = MATURE_SNAPSHOT_PREFIX + file.name
+                data = file.read_bytes()
+                manifest["research_evidence_sha256"][member] = hashlib.sha256(data).hexdigest()
+                z.writestr(member, data)
             z.writestr("manifest.json", json.dumps(manifest, sort_keys=True))
         data = output.getvalue()
         if len(data) > MAX_ARCHIVE_BYTES:
@@ -110,26 +129,49 @@ def _make_archive(home):
 
 
 def _restore_archive(home, raw):
+    """Restore legacy v1 and verified v2 archive formats, with strict paths."""
     if len(raw) > MAX_ARCHIVE_BYTES:
         raise ValueError("Private snapshot is too large")
     with zipfile.ZipFile(io.BytesIO(raw)) as z:
-        members = {item.filename: item for item in z.infolist()}
-        if set(members) != (STATE_FILES | {"manifest.json"}):
+        contents = z.infolist()
+        members = {item.filename: item for item in contents}
+        if len(members) != len(contents):
+            raise ValueError("Duplicate private snapshot entry")
+        if not (STATE_FILES | {"manifest.json"}).issubset(members):
             raise ValueError("Unrecognized private snapshot contents")
         if sum(v.file_size for v in members.values()) > MAX_UNPACKED_BYTES:
             raise ValueError("Private snapshot expands beyond safe limit")
         manifest = json.loads(z.read("manifest.json"))
-        if manifest.get("schema_version") != 1:
+        version = manifest.get("schema_version")
+        if version not in (1, 2):
             raise ValueError("Unsupported private snapshot version")
-        for name, check in (("settings.json","settings_sha256"), ("data/monitor.sqlite3","sqlite_sha256")):
+        extra = set(members) - (STATE_FILES | {"manifest.json"})
+        if version == 1:
+            if extra:
+                raise ValueError("Unrecognized private snapshot contents")
+        else:
+            checks = manifest.get("research_evidence_sha256")
+            if not isinstance(checks, dict) or set(checks) != extra or len(extra) > MAX_MATURE_SNAPSHOTS:
+                raise ValueError("Research evidence inventory does not match archive")
+            for name in extra:
+                if not name.startswith(MATURE_SNAPSHOT_PREFIX) or not MATURE_SNAPSHOT_NAME.fullmatch(
+                    name[len(MATURE_SNAPSHOT_PREFIX):]
+                ):
+                    raise ValueError("Unsafe research evidence archive entry")
+        if set(members) != STATE_FILES | {"manifest.json"} | extra:
+            raise ValueError("Unrecognized private snapshot contents")
+        for name in ["settings.json", "data/monitor.sqlite3", *sorted(extra)]:
+            check = ({"settings.json": "settings_sha256",
+                      "data/monitor.sqlite3": "sqlite_sha256"}.get(name))
+            expected = manifest.get(check) if check else manifest["research_evidence_sha256"][name]
             raw_value = z.read(name)
-            if hashlib.sha256(raw_value).hexdigest() != manifest.get(check):
+            if hashlib.sha256(raw_value).hexdigest() != expected:
                 raise ValueError("Private snapshot integrity check failed")
             target = Path(home) / name
-            target.parent.mkdir(parents=True,exist_ok=True)
+            target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(raw_value)
-            os.chmod(target,0o600)
-        if not (Path(home)/"data/monitor.sqlite3").read_bytes().startswith(b"SQLite format 3\x00"):
+            os.chmod(target, 0o600)
+        if not (Path(home) / "data/monitor.sqlite3").read_bytes().startswith(b"SQLite format 3\x00"):
             raise ValueError("Private snapshot is not SQLite")
 
 
@@ -411,6 +453,9 @@ def _check_account(home):
 def _compute(home):
     from investlab import service, verification
     _check_account(home)
+    repaired = service.worker(home, "recover-research-evidence", timeout=120)
+    if repaired.get("unresolved"):
+        raise ValueError("Unrestorable historical mature research input evidence")
     calculated = service.run(home,online=True,independent=True)
     if not calculated.get("qualified_online"):
         raise ValueError("Live quotes were not independently qualified")
