@@ -382,6 +382,35 @@ async def diagnose_research(request: Request):
         }, status_code=503)
 
 
+
+@app.post("/api/scheduled/recover")
+async def save_verified_daily_recovery(request: Request):
+    """One opt-in append-only official research run, without valuation updates."""
+    _private_origin(request)
+    if not _configured():
+        raise HTTPException(503, "Private storage not configured")
+    try:
+        payload = await request.json()
+        state = payload.get("expected_state_version") if isinstance(payload, dict) else None
+        if set(payload) != {"confirmed", "expected_state_version"} or payload["confirmed"] is not True or (
+            not isinstance(state, str) or not re.fullmatch(
+                r"state/[0-9]{8}T[0-9]{12}Z-[0-9a-f]{32}\.zip", state)
+        ):
+            raise ValueError("Explicit confirmation and latest account state are required")
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(422, "Invalid confirmed recovery request")
+    try:
+        result = await automation.manual_recovery(expected_state_version=state)
+    except Exception as exc:
+        return JSONResponse({"status":"FAILED",
+            "failure_category":automation._failure_category(exc),
+            "failure_type":type(exc).__name__,"trading_enabled":False},status_code=503)
+    if result["status"] in ("SUCCEEDED","ALREADY_VERIFIED"):
+        return result
+    return JSONResponse(result,status_code=409 if result["status"] in
+                        ("ACCOUNT_VERSION_CHANGED","DUPLICATE_SUPPRESSED") else 503)
+
+
 @app.get("/api/cron/daily")
 async def daily_run(request: Request):
     bearer = request.headers.get("authorization", "")
