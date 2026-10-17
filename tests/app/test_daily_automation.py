@@ -178,5 +178,20 @@ class DailyAutomationTests(unittest.TestCase):
 
 
 
+    def test_explicit_audit_check_codes_are_extracted_without_free_text(self):
+        exc=ValueError("证据审计未通过: portfolio_evidence.missing_source=2;model.invalid=1; token_secret?bad;sqlite_integrity")
+        codes=automation._audit_failure_checks(exc)
+        self.assertIn("portfolio_evidence.missing_source=2",codes)
+        self.assertIn("model.invalid=1",codes)
+        self.assertIn("sqlite_integrity",codes)
+        self.assertNotIn("token_secret?bad",codes)
+
+    def test_independent_price_source_not_verified_is_not_automatically_audit_failure(self):
+        self.assertEqual(automation._audit_failure_checks(ValueError("Live quotes were not independently qualified")),[])
+        self.assertEqual(automation._failure_category(ValueError("证据审计未通过: data_errors=1")),
+                         "ACCOUNT_OR_EVIDENCE_AUDIT_FAILED")
+
+
+
 if __name__=="__main__":
     unittest.main()

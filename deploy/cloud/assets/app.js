@@ -544,8 +544,10 @@
           return t+"："+status+"；行情 "+date+"；独立来源 "+quote+
             (errors?"；采集错误来源 "+errors:"");
         });
+        const checks=Array.isArray(data.failed_audit_checks)?data.failed_audit_checks:[];
         out.textContent="本次失败类型："+(data.failure_category||"RESEARCH_EXECUTION_FAILED")+
-          "。"+summary.join("。")+"。诊断没有更改账户。";
+          "。"+(checks.length?"未通过的审计项目："+checks.join("、")+"。":"")+
+          summary.join("。")+"。诊断没有更改账户。";
       }else{
         out.textContent="诊断未能完成："+(data.failure_category||data.status||"UNKNOWN");
       }
