@@ -42,7 +42,7 @@ def nyse_session(utc_time=None):
 async def _claim(session, attempt, account_version):
     """Durable single-winner claim for a given NYSE session and attempt."""
     from vercel.blob import put_blob
-    if attempt not in ("primary", "retry"):
+    if attempt not in ("primary", "retry", "manual_recovery"):
         raise ValueError("Unknown scheduled attempt")
     generation = hashlib.sha256(str(account_version).encode()).hexdigest()[:24]
     path = f"schedule-claims/{session}-{generation}-{attempt}.json"
@@ -187,7 +187,7 @@ async def diagnose_readonly():
             }
 
 
-async def execute_once(attempt="primary", *, current_session=None):
+async def execute_once(attempt="primary", *, current_session=None, expected_state_version=None):
     """Run one scheduled attempt, preserving live portfolio state/ unchanged."""
     session = current_session if current_session is not None else nyse_session()
     if session is None:
@@ -196,6 +196,8 @@ async def execute_once(attempt="primary", *, current_session=None):
         raise ValueError("Unknown scheduled attempt")
     account = await cloud.read_private_account()
     source_version = account.get("state_version") or "no-confirmed-account"
+    if expected_state_version is not None and source_version != expected_state_version:
+        return {"status":"ACCOUNT_VERSION_CHANGED","trading_enabled":False}
     previous = await _last_receipt()
     if previous and previous.get("scheduled_session") == session and \
             previous.get("status") == "SUCCEEDED" and \
@@ -266,6 +268,24 @@ def _send_failure_email(report):
         smtp.login(user, password)
         smtp.send_message(msg)
     return "SENT"
+
+
+def last_completed_session():
+    """Allow authenticated one-time recovery after the NYSE session, including weekends."""
+    from .core import ENGINE
+    sys.path.insert(0, str(ENGINE))
+    try:
+        import monitor
+        return monitor.expected_close_session().isoformat()
+    finally:
+        sys.path.pop(0)
+
+
+async def manual_recovery(*, expected_state_version):
+    """A third bounded run attempt, append-only, with original account untouched."""
+    return await execute_once("manual_recovery",
+                              current_session=last_completed_session(),
+                              expected_state_version=expected_state_version)
 
 
 async def daily_primary():
