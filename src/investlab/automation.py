@@ -89,6 +89,86 @@ def _run_sync(home):
     return cloud._compute(home)
 
 
+
+def _failure_category(exc):
+    """Whitelist recognizable failure reasons for safe user-facing diagnostics."""
+    detail = str(exc)
+    if "Live quotes were not independently qualified" in detail:
+        return "MARKET_DATA_NOT_QUALIFIED"
+    if "证据审计未通过" in detail or "audit failed" in detail.lower():
+        return "ACCOUNT_OR_EVIDENCE_AUDIT_FAILED"
+    if "Independent research verification failed" in detail:
+        return "RESEARCH_VERIFICATION_FAILED"
+    if "Account version changed" in detail or "snapshot changed" in detail:
+        return "ACCOUNT_VERSION_CHANGED"
+    if "private snapshot" in detail.lower() or "account baseline" in detail.lower():
+        return "ACCOUNT_SNAPSHOT_UNAVAILABLE"
+    return "RESEARCH_EXECUTION_FAILED"
+
+
+def _market_failure_facts(home):
+    """Read a temporary worker's saved fetch details, never portfolio values."""
+    file = Path(home) / "data" / "last_online_attempt.json"
+    if not file.is_file():
+        return {"evidence": "NO_FETCH_RECORD"}
+    try:
+        data = json.loads(file.read_text(encoding="utf-8"))
+        market = data.get("market_dates") or {}
+        fetch = data.get("fetch") or {}
+        result = {}
+        for ticker in ("QQQ", "TQQQ"):
+            f = fetch.get(ticker) or {}
+            attempts = f.get("attempts") or []
+            result[ticker] = {
+                "online_success": f.get("online_success") is True,
+                "latest_price_session": market.get(ticker),
+                "source_status": [
+                    {"source": a.get("source"), "status": a.get("status"),
+                     "error_type": ("UPSTREAM_HTTP_OR_DATA_ERROR"
+                                    if a.get("status") == "ERROR" else None)}
+                    for a in attempts[:2] if isinstance(a, dict)
+                ],
+                "independent_source": f.get("independent_status", "NOT_VERIFIED"),
+                "independent_error": bool(f.get("independent_quote_error")),
+            }
+        return result
+    except (OSError, ValueError, TypeError):
+        return {"evidence": "FETCH_RECORD_UNREADABLE"}
+
+
+async def diagnose_readonly():
+    """Real network research on a temporary copy; no production state/report writes."""
+    account = await cloud.read_private_account()
+    if not account.get("account_initialized") or not account.get("state_version"):
+        return {"status": "ACCOUNT_NOT_READY", "trading_enabled": False}
+    with tempfile.TemporaryDirectory(prefix="investlab-diagnose-") as temp:
+        home = Path(temp) / "private"
+        try:
+            if not await cloud.load_private_home(
+                home, expected_version=account["state_version"]
+            ):
+                raise ValueError("Missing original private snapshot")
+            computed = await asyncio.to_thread(_run_sync, home)
+            return {
+                "status": "QUALIFIED",
+                "scheduled_session": nyse_session(),
+                "qualified_online": computed.get("qualified_online") is True,
+                "trading_enabled": False,
+                "saved_to_production": False,
+            }
+        except Exception as exc:
+            return {
+                "status": "FAILED",
+                "scheduled_session": nyse_session(),
+                "failure_category": _failure_category(exc),
+                "failure_type": type(exc).__name__,
+                "market": _market_failure_facts(home),
+                "qualified_online": False,
+                "trading_enabled": False,
+                "saved_to_production": False,
+            }
+
+
 async def execute_once(attempt="primary", *, current_session=None):
     """Run one scheduled attempt, preserving live portfolio state/ unchanged."""
     session = current_session if current_session is not None else nyse_session()
@@ -132,7 +212,9 @@ async def execute_once(attempt="primary", *, current_session=None):
         report["started_at"] = report.get("started_at", cloud.now())
     except Exception as exc:
         report.update(status="FAILED", issue_code="SCHEDULED_RESEARCH_FAILED",
-                      failure_type=type(exc).__name__, qualified_online=False)
+                      failure_type=type(exc).__name__,
+                      failure_category=_failure_category(exc),
+                      qualified_online=False)
     try:
         return await _persist_receipt(report)
     except Exception as exc:

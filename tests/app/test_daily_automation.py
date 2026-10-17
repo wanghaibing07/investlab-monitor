@@ -136,5 +136,47 @@ class DailyAutomationTests(unittest.TestCase):
         self.assertEqual(result["issue_code"],"SCHEDULED_RECEIPT_PERSIST_FAILED")
 
 
+    def test_live_diagnostic_does_not_mutate_confirmed_account_or_production_reports(self):
+        with (patch("investlab.automation.cloud.read_private_account",
+                    new=AsyncMock(return_value=ACCOUNT)),
+              patch("investlab.automation.cloud.load_private_home",
+                    new=AsyncMock(return_value=True)),
+              patch("investlab.automation._run_sync",
+                    side_effect=ValueError("Live quotes were not independently qualified")),
+              patch("investlab.automation.cloud._write",new=AsyncMock()) as write,
+              patch("investlab.automation.cloud.save_private_report",
+                    new=AsyncMock()) as receipt,
+              patch("investlab.automation.cloud.save_private_home",
+                    new=AsyncMock()) as state):
+            result=asyncio.run(automation.diagnose_readonly())
+        self.assertEqual(result["status"],"FAILED")
+        self.assertEqual(result["failure_category"],"MARKET_DATA_NOT_QUALIFIED")
+        self.assertFalse(result["saved_to_production"])
+        self.assertFalse(result["trading_enabled"])
+        write.assert_not_awaited()
+        receipt.assert_not_awaited()
+        state.assert_not_awaited()
+
+    def test_diagnostic_market_evidence_redacts_fetch_exception_messages(self):
+        import tempfile, json
+        with tempfile.TemporaryDirectory() as temp:
+            home=Path(temp)
+            (home/"data").mkdir()
+            (home/"data"/"last_online_attempt.json").write_text(json.dumps({
+                "market_dates":{"QQQ":"2026-10-15","TQQQ":None},
+                "fetch":{"QQQ":{"online_success":False,"attempts":[{
+                   "source":"YAHOO_QUERY1","status":"ERROR",
+                   "reason":"confidential-secret SHOULD-NOT-LEAK"}]},
+                 "TQQQ":{"online_success":True,"attempts":[],
+                   "independent_status":"DATE_MISMATCH"}}
+            }))
+            result=automation._market_failure_facts(home)
+        self.assertFalse(result["QQQ"]["online_success"])
+        self.assertEqual(result["QQQ"]["latest_price_session"],"2026-10-15")
+        self.assertEqual(result["TQQQ"]["independent_source"],"DATE_MISMATCH")
+        self.assertNotIn("confidential-secret",json.dumps(result))
+
+
+
 if __name__=="__main__":
     unittest.main()

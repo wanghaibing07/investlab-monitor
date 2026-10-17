@@ -359,6 +359,29 @@ async def manual_run(request: Request):
     return JSONResponse(result, status_code=200 if result.get("status") == "SUCCEEDED" else 503)
 
 
+
+@app.post("/api/diagnostics/research")
+async def diagnose_research(request: Request):
+    """Opt-in transient full-chain check from the authenticated private UI."""
+    _private_origin(request)
+    if not _configured():
+        raise HTTPException(503, "Private storage not configured")
+    data = await request.json()
+    if not isinstance(data, dict) or data.get("confirmed") is not True:
+        raise HTTPException(422, "Confirm an isolated diagnostic run")
+    try:
+        result = await automation.diagnose_readonly()
+        return JSONResponse(result, status_code=200 if result["status"] == "QUALIFIED" else 422)
+    except Exception as exc:
+        return JSONResponse({
+            "status": "DIAGNOSTIC_UNAVAILABLE",
+            "failure_category": automation._failure_category(exc),
+            "failure_type": type(exc).__name__,
+            "saved_to_production": False,
+            "trading_enabled": False,
+        }, status_code=503)
+
+
 @app.get("/api/cron/daily")
 async def daily_run(request: Request):
     bearer = request.headers.get("authorization", "")
@@ -404,6 +427,7 @@ async def daily_scheduler_status():
                  "INVESTLAB_SMTP_PASSWORD","INVESTLAB_ALERT_TO")),
             "last_session": receipt.get("scheduled_session") if receipt else None,
             "last_result": receipt.get("status") if receipt else "NOT_YET_RUN",
+            "last_failure_category": receipt.get("failure_category") if receipt else None,
             "last_completed": receipt.get("completed_at") if receipt else None,
             "trading_enabled": False,
             "schedule_health_proven": False,

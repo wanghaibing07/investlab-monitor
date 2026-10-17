@@ -115,5 +115,44 @@ class RecoveryAndCronTests(unittest.TestCase):
 
 
 
+    def test_isolated_diagnostic_rejects_cross_origin_and_requires_consent(self):
+        with (patch.dict(os.environ, {"BLOB_READ_WRITE_TOKEN": "configured"}),
+              patch("investlab.automation.diagnose_readonly",new=AsyncMock()) as diag):
+            self.assertEqual(self.client.post("/api/diagnostics/research",
+                json={"confirmed":True}).status_code,403)
+            self.assertEqual(self.client.post("/api/diagnostics/research",
+                json={"confirmed":True},
+                headers={"Origin":"https://attacker.example"}).status_code,403)
+            self.assertEqual(self.client.post("/api/diagnostics/research",
+                json={"confirmed":False},
+                headers={"Origin":"https://testserver"}).status_code,422)
+            diag.assert_not_awaited()
+
+    def test_isolated_diagnostic_does_not_report_failure_as_success(self):
+        failure={"status":"FAILED","failure_category":"MARKET_DATA_NOT_QUALIFIED",
+                 "qualified_online":False,"saved_to_production":False,"trading_enabled":False}
+        with (patch.dict(os.environ, {"BLOB_READ_WRITE_TOKEN":"configured"}),
+              patch("investlab.automation.diagnose_readonly",
+                    new=AsyncMock(return_value=failure)) as diag):
+            response=self.client.post("/api/diagnostics/research",json={"confirmed":True},
+                headers={"Origin":"https://testserver"})
+        self.assertEqual(response.status_code,422)
+        self.assertEqual(response.json()["failure_category"],"MARKET_DATA_NOT_QUALIFIED")
+        self.assertFalse(response.json()["saved_to_production"])
+        diag.assert_awaited_once()
+
+    def test_isolated_diagnostic_success_is_still_not_a_saved_daily_run(self):
+        success={"status":"QUALIFIED","qualified_online":True,
+                 "saved_to_production":False,"trading_enabled":False}
+        with (patch.dict(os.environ, {"BLOB_READ_WRITE_TOKEN":"configured"}),
+              patch("investlab.automation.diagnose_readonly",
+                    new=AsyncMock(return_value=success))):
+            response=self.client.post("/api/diagnostics/research",json={"confirmed":True},
+                headers={"Origin":"https://testserver"})
+        self.assertEqual(response.status_code,200)
+        self.assertFalse(response.json()["saved_to_production"])
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -514,6 +514,45 @@
       showToast("本次监控未验收成功："+e.message+"。请先查看运行状态，不要立即重复运行。",true);
     }finally{state.mutating=false;busyButton(btn,false,"确认运行");await loadAll();window.location.hash="runs";}
   }
+  async function diagnoseResearch(){
+    const btn=$("diagnose-research"),out=$("research-diagnostic-result");
+    if(!btn||!out||btn.disabled)return;
+    btn.disabled=true;
+    out.textContent="正在重新采集真实行情并做隔离计算，可能需要数十秒…";
+    try{
+      let data;
+      try{
+        data=await api("/api/diagnostics/research",{method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({confirmed:true})});
+      }catch(error){
+        if(!error.payload||!error.payload.status)throw error;
+        data=error.payload;
+      }
+      if(data.status==="QUALIFIED"){
+        out.textContent="本次独立重测已通过行情和研究校验。诊断未保存为正式日报；请核对定时任务的下一次运行记录。";
+      }else if(data.status==="FAILED"){
+        const market=data.market||{};
+        const summary=["QQQ","TQQQ"].map(t=>{
+          const x=market[t];
+          if(!x)return t+"：没有可用采集记录";
+          const status=x.online_success?"在线历史已获取":"在线历史未成功获取";
+          const quote=x.independent_source||"NOT_VERIFIED";
+          const date=x.latest_price_session||"无日期";
+          const errors=(x.source_status||[]).filter(y=>y.status==="ERROR")
+            .map(y=>y.source).join("、");
+          return t+"："+status+"；行情 "+date+"；独立来源 "+quote+
+            (errors?"；采集错误来源 "+errors:"");
+        });
+        out.textContent="本次失败类型："+(data.failure_category||"RESEARCH_EXECUTION_FAILED")+
+          "。"+summary.join("。")+"。诊断没有更改账户。";
+      }else{
+        out.textContent="诊断未能完成："+(data.failure_category||data.status||"UNKNOWN");
+      }
+    }catch(error){
+      out.textContent="诊断请求未完成："+error.message;
+    }finally{btn.disabled=false;}
+  }
   async function loadSchedulerState(){
     const out=$("scheduler-state"),alert=$("scheduler-alert-state");
     if(!out||!alert)return;
@@ -565,6 +604,7 @@
     $("mobile-scrim").addEventListener("click",()=>{$("sidebar").classList.remove("is-open");$("mobile-scrim").hidden=true;$("mobile-menu").setAttribute("aria-expanded","false");});
     $("refresh-button").addEventListener("click",loadAll);$("error-retry").addEventListener("click",loadAll);
     $("check-recovery").addEventListener("click",checkRecovery);
+    $("diagnose-research").addEventListener("click",diagnoseResearch);
     $("refresh-scheduler-status").addEventListener("click",loadSchedulerState);
     for(const b of $$("[data-open-editor]"))b.addEventListener("click",openEditor);
     for(const b of $$("[data-open-run]"))b.addEventListener("click",openRun);
