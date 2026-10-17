@@ -451,6 +451,9 @@ def _check_account(home):
 def _compute(home):
     from investlab import service, verification
     _check_account(home)
+    repaired = service.worker(home, "recover-research-evidence", timeout=120)
+    if repaired.get("unresolved"):
+        raise ValueError("Unrestorable historical mature research input evidence")
     calculated = service.run(home,online=True,independent=True)
     if not calculated.get("qualified_online"):
         raise ValueError("Live quotes were not independently qualified")
