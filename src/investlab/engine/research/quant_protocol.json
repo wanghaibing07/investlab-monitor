@@ -1,0 +1,58 @@
+{
+  "version": "5.5",
+  "experiment_id": "Q55_QQQ60_TQQQ40_RISK_PATHS_01",
+  "registered_at": "2026-10-15T04:25:20+08:00",
+  "scope": "RESEARCH_AND_MANUAL_REVIEW_CONTEXT",
+  "event": {
+    "horizon": 20,
+    "threshold": -0.1,
+    "definition": "MIN_FUTURE_ADJUSTED_CLOSE_VS_ORIGIN_CLOSE"
+  },
+  "logistic": {
+    "stride": 20,
+    "minimum_samples": 60,
+    "minimum_each_class": 3,
+    "ridge": 0.1,
+    "iterations": 400,
+    "learning_rate": 0.25
+  },
+  "features": [
+    "SMA200_GAP_DIV_0.20",
+    "RV20_ANNUAL_DIV_0.30",
+    "MOMENTUM63_DIV_0.20"
+  ],
+  "first_test_year": 2015,
+  "simulation": {
+    "seed": 5301,
+    "daily_paths": 256,
+    "daily_horizon": 63,
+    "block_sessions": 20,
+    "research_paths": 600,
+    "research_horizon": 252,
+    "sensitivity_blocks": [
+      5,
+      20,
+      60
+    ]
+  },
+  "cost_scenarios": {
+    "bps_per_side": [
+      15,
+      50
+    ],
+    "fixed_cny_per_ticket": [
+      0,
+      5,
+      20
+    ]
+  },
+  "covariance_sessions": 60,
+  "parameter_search_trials": 0,
+  "history_already_seen": true,
+  "allocation_override": false,
+  "auto_trading": false,
+  "asset_universe": [
+    "QQQ",
+    "TQQQ"
+  ]
+}

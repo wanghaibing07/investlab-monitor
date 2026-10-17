@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "investlab-monitor"
+version = "6.0.1"
+description = "Local-first QQQ/TQQQ portfolio monitor, research and evidence journal"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = ["fastapi>=0.117.1,<1", "vercel==0.12.0"]
+
+[project.optional-dependencies]
+verify = ["numpy>=1.26,<3"]
+
+[project.scripts]
+investlab = "investlab.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+investlab = ["web/*", "engine/*.json", "engine/research/*.json", "engine/data/research/*.json"]

@@ -1,0 +1,8 @@
+{
+  "protocol_sha256": "26b658433dedf10ce3059c4796ea645c8dae6b8159dc84f03691992d0db2594c",
+  "frozen_at": "2026-10-14T14:03:48+08:00",
+  "before_candidate_evaluation": true,
+  "parameter_search_trials": 0,
+  "parent_protocol_sha256": "ad29db0d17d1a9e9ac024c3e8eab2f4862e487f715eced3f4fa2b8ce50f89f83",
+  "version_change_reason": "Live evidence revealed micro precision revisions; decision identity separate from exact price evidence; no portfolio-parameter tuning"
+}

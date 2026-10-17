@@ -1,0 +1,69 @@
+{
+  "schema_version": 4,
+  "strategy_id": "qqq_core_research_observer_v4_1",
+  "execution": {
+    "signal": "close_t",
+    "execute": "next_session",
+    "slippage_bps": 5,
+    "transaction_fee_bps": 10,
+    "execution_delay_sessions": 1,
+    "auto_trading": false
+  },
+  "indicators": {
+    "sma_short": 20,
+    "sma_fast": 50,
+    "sma_trend": 200,
+    "sma_trend_slope_days": 20,
+    "momentum_days": 63,
+    "volatility_days": 20,
+    "drawdown_days": 252
+  },
+  "qqq": {
+    "hard_min_weight": 0.5,
+    "hard_max_weight": 0.85,
+    "neutral_target": 0.65,
+    "risk_off_target": 0.55,
+    "crisis_target": 0.5,
+    "bull_targets": {
+      "dd_0_to_5": 0.7,
+      "dd_5_to_10": 0.75,
+      "dd_10_to_15": 0.8,
+      "dd_over_15": 0.85
+    },
+    "time_deployment": {
+      "step": 0.05,
+      "every_sessions": 20,
+      "max_without_drawdown": 0.8
+    }
+  },
+  "tqqq": {
+    "default_weight": 0.0,
+    "entry_weight": 0.05,
+    "hard_max_weight": 0.1,
+    "requires_regime": "BULL",
+    "qqq_drawdown_range": [
+      -12.0,
+      -5.0
+    ],
+    "qqq_vol20_entry_max": 25.0,
+    "qqq_vol20_exit": 35.0,
+    "requires_qqq_momentum63_positive": true,
+    "requires_two_closes_above_sma20": true,
+    "exit_if_qqq_below_sma200": true,
+    "hard_stop_from_entry_pct": -20.0,
+    "trim_above_weight": 0.075,
+    "trim_to_weight": 0.05,
+    "actual_position_scope": "MONITOR_ONLY"
+  },
+  "portfolio": {
+    "cash_min_weight": 0.15,
+    "effective_ndx_exposure_max": 1.0,
+    "effective_ndx_exposure_formula": "qqq_weight + 3*tqqq_weight"
+  },
+  "data_quality": {
+    "no_new_risk_if_stale": true,
+    "no_new_risk_if_source_conflict": true
+  },
+  "status": "EXPERIMENTAL_OBSERVATION_ONLY",
+  "time_anchor": "current_user_confirmed_portfolio_baseline_as_of"
+}

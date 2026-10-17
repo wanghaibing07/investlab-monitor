@@ -1,0 +1,127 @@
+{
+  "schema_version": 2,
+  "research_id": "qqq_tqqq_v5_1_20261014_attempt02",
+  "scope": "PAPER_RESEARCH_ONLY",
+  "source_library_version": 23,
+  "source_zip_sha256": "c8512270667e8d88c8f3a3bf3f6fb5dc9fb6c04bd67263583c2dba8d15f0abe3",
+  "historical_data_already_seen": true,
+  "validation_label": "HISTORICAL_PSEUDO_OUT_OF_SAMPLE_NOT_BLIND",
+  "warmup_sessions": 252,
+  "strategy_inception": "FIRST_ALIGNED_SESSION_AFTER_WARMUP",
+  "shadow_start_date": "2026-10-14",
+  "account_anchor": "USER_CONFIRMED_BASELINE_ONLY",
+  "execution": "SIGNAL_CLOSE_T_EXECUTE_CLOSE_T_PLUS_1",
+  "cash_yield": 0,
+  "cost_bps_per_side": [
+    0,
+    15,
+    50
+  ],
+  "turnover_band": 0.05,
+  "trend": {
+    "sma": 200,
+    "enter_buffer": 0.03,
+    "exit_buffer": 0.02
+  },
+  "ewma": {
+    "lambda": 0.94,
+    "entry_vol_max": 0.25,
+    "high_vol": 0.35
+  },
+  "risk": {
+    "target_vol": 0.12,
+    "covariance_sessions": 60,
+    "qqq_min": 0.5,
+    "qqq_max": 0.85,
+    "tqqq_max": 0.1,
+    "tqqq_entry": 0.05,
+    "cash_min": 0.15,
+    "daily_exposure_max": 1.0
+  },
+  "swing": {
+    "qqq_rsi_days": 2,
+    "entry_below": 10,
+    "exit_above": 70,
+    "max_holding_sessions": 8,
+    "weight": 0.05,
+    "ibs_required": false,
+    "ibs_reason": "NO_VERIFIED_HISTORICAL_OHLC"
+  },
+  "value_average": {
+    "quarter_target": 0.09,
+    "initial_tqqq": 0.6,
+    "trend_buy_lock": true,
+    "identity": "SIMPLIFIED_VALUE_AVERAGING_NOT_OFFICIAL_9SIG",
+    "risk_only": true
+  },
+  "models": [
+    "B_QQQ",
+    "B_QQQ80",
+    "B_USER70_20_10_STRESS",
+    "B_TQQQ_STRESS",
+    "C0_CORE_ANCHORED",
+    "C0_TACTICAL_ANCHORED",
+    "M1_TREND_ONLY",
+    "M1_EWMA_ONLY",
+    "M1_TREND_EWMA",
+    "M2_COVARIANCE_BUDGET",
+    "B_MATCHED_DAILY_EXPOSURE",
+    "B_QQQ_VOL12",
+    "R_RSI2_SWING",
+    "R_LRS_FULL_TQQQ_STRESS",
+    "R_VALUE_AVERAGE_STRESS",
+    "M2_FLEXIBLE_FLOOR_PAPER",
+    "B_MATCHED_COV_VOL_PAPER"
+  ],
+  "walk_forward": {
+    "train_years": 3,
+    "validation_years": 1,
+    "test_years": 1,
+    "first_test_year": 2015,
+    "purge_sessions": 90,
+    "label_horizons": [
+      7,
+      30,
+      90
+    ],
+    "fit_models": false
+  },
+  "selection": {
+    "baseline": "B_QQQ_VOL12",
+    "sharpe_delta_min": 0.05,
+    "positive_window_fraction_min": 0.65,
+    "max_tail_loss_ratio": 1.1,
+    "action_on_insufficient_evidence": "KEEP_PRODUCTION_V4_1"
+  },
+  "parameter_search_trials": 0,
+  "max_trial_evaluations": 51,
+  "excluded": {
+    "HFEA": "NO_VERIFIED_TMF_MANAGED_FUTURES_GOLD_SERIES_OR_RISK_APPROVAL",
+    "OPTION_COLLAR": "NO_HISTORICAL_CHAIN_EXECUTION_OR_ASSIGNMENT_MODEL",
+    "GARCH_LOGISTIC_TREES": "OPTIONAL_ONLY_AFTER_CORE_DATA_AND_RESEARCH_GATES"
+  },
+  "auto_trading": false,
+  "actual_portfolio_mutation": false,
+  "new_notifications": false,
+  "parent_protocol_sha256": "ad29db0d17d1a9e9ac024c3e8eab2f4862e487f715eced3f4fa2b8ce50f89f83",
+  "paper_flexible_risk": {
+    "qqq_min": 0.0,
+    "target_vol": 0.12,
+    "scale": "PROPORTIONAL_COVARIANCE_BUDGET",
+    "production_approved": false,
+    "force_rebalance_if_estimated_vol_exceeds_target": true
+  },
+  "implementation_corrections": [
+    "SEMANTIC_PRICE_HASH_EXCLUDES_FETCH_TIME",
+    "TREND_ONLY_ABLATION_DOES_NOT_USE_EWMA",
+    "NEXT_CLOSE_TIMEOUT_COUNTS_HOLDING_PERIOD",
+    "SIGNAL_DATA_AND_CONFIG_SNAPSHOT_REQUIRED",
+    "UNKNOWN_MODEL_REJECTED",
+    "DECISION_ID_STABLE_UNDER_UPSTREAM_SUB_TICK_PRECISION_REVISIONS"
+  ],
+  "signal_identity": {
+    "basis": "DECISION_FINGERPRINT_V2",
+    "weight_rounding_decimals": 4,
+    "all_exact_price_vintages_preserved": true
+  }
+}
