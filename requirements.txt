@@ -1,0 +1,4 @@
+-e .
+fastapi>=0.117.1,<1
+httpx
+vercel==0.12.0
