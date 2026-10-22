@@ -9,6 +9,9 @@ DATA_ROOT=Path(os.environ.get('INVESTLAB_HOME',str(ROOT))).expanduser().resolve(
 
 
 def decision_lines(run):
+    if run.get('decision'):
+        from investlab.decision import summary_lines
+        return summary_lines(run['decision'], run['account_state'])
     review=run.get('allocation_review',{});target=review.get('next_review_weights')
     if review.get('status')!='ALLOCATION_REVIEW' or not target:
         action=('行情有冲突，先核对价格' if run.get('data_evidence_grade')=='SOURCE_CONFLICT'

@@ -26,6 +26,9 @@ def main():
             from investlab.providers import yahoo
             m.yahoo_download = yahoo
         report = m.build_report(online=online, independent_check="--independent-check" in sys.argv, now=now)
+        from investlab.decision import attach
+        import advisory
+        attach(report, m.DB.parent.parent, advisory.config())
         saved = m.save_report(report)
         result = {"run_id": saved["run_id"], "mode": report["mode"], "report": report,
                   "backup": saved["database_backup"]}

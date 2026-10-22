@@ -107,6 +107,7 @@ def run(home, *, online=False, independent=False):
                 "code_sha256": source_at_start, "demo": cfg["demo"], "qualified_online": qualified,
                 "mode": report["mode"], "evidence_grade": report["data_evidence_grade"],
                 "review": review, "market": report["market"], "portfolio": report["portfolio"],
+                "decision": report["decision"], "account_state": report["account_state"],
                 "risk": risk_summary(report), "mature_models": report.get("mature_models", {}),
                 "alerts": report["alerts"], "trading_enabled": False,
                 "persistence_errors": {k: v for k, v in report.items() if k.endswith("persistence_error")},
@@ -116,7 +117,7 @@ def run(home, *, online=False, independent=False):
         rid = digest(base); base["review_id"] = rid
         with connection(home) as c:
             c.execute("INSERT INTO app_reviews VALUES(?,?,?,?,?,?)", (rid, operation, base["session_date"], base["created_at"], canonical(base), digest(base)))
-            nid = digest({"signal_id": review["signal_id"], "session": base["session_date"], "demo": cfg["demo"]})
+            nid = digest({"proposal_id": report["decision"]["proposal_id"], "demo": cfg["demo"]})
             body = plain_summary(base)
             c.execute("INSERT OR IGNORE INTO notifications VALUES(?,?,?,'LOCAL_ONLY',?)", (nid, rid, utcnow(), body))
             c.execute("UPDATE operations SET status='PERSISTED',details=? WHERE operation_id=?", (canonical({"review_id": rid}), operation))
@@ -144,7 +145,16 @@ def plain_summary(value):
     elif value.get("market_session_current") is False:
         headline = "今日：报告行情已落后于最新完整交易日，更新后再复核。"
         target = None
-    elif review["status"] != "ALLOCATION_REVIEW": headline = "今日：缓存复算或数据不足，查看条件；暂无新的调整步骤。"
+    elif value.get("decision"):
+        from .decision import summary_lines
+        lines = summary_lines(value["decision"], value["account_state"])
+        lines.append("行情截至 " + min(v.get("last_date", "未知") for v in value["market"].values())
+                     + "；账户估值截至 " + value["portfolio"]["as_of"] + "。")
+        lines.append("未下单；规则版本 " + value["decision"]["version"] + "。")
+        return "\n".join(lines)
+    elif review["status"] != "ALLOCATION_REVIEW":
+        headline = "今日：缓存复算或数据不足，查看条件；暂无新的调整步骤。"
+        target = None
     else:
         labels = {"HOLD": "维持", "INCREASE_REVIEW": "增加至", "REDUCE_REVIEW": "减少至"}
         headline = "今日：" + "；".join(s + labels[review["actions"][s]] + (f'{target[s]:.0%}' if review["actions"][s] != "HOLD" else "") for s in ("QQQ", "TQQQ")) + "。"
@@ -168,10 +178,24 @@ def latest(home):
         value["stale_for_today"] = datetime.now(timezone.utc) - datetime.fromisoformat(value["created_at"]) > timedelta(hours=36)
         from .engine.monitor import expected_close_session
         value["market_session_current"] = value["session_date"] == expected_close_session().isoformat()
+        # A newly reported trade must invalidate a saved zero-position assumption
+        # immediately, without rewriting the immutable historical report.
+        from .decision import account_evidence, decide
+        from .engine.advisory import config as advisory_config
+        cfg = settings(home)
+        account = account_evidence(Path(home) / "data/monitor.sqlite3", value["portfolio"],
+                                   value["session_date"], cfg.get("account", "default"))
+        source = {"allocation_review": value["review"], "market": value["market"],
+                  "mode": value["mode"], "data_evidence_grade": value["evidence_grade"],
+                  "as_of_expected_session": value["session_date"]}
+        value["account_state"] = account
+        value["decision"] = decide(source, account, cfg.get("risk_budget"), advisory_config())
         value["is_actionable"] = bool(not value["demo"] and value["qualified_online"]
             and value["market_session_current"] and value["operation"]["status"] == "SUCCEEDED"
             and value["latest_attempt"]["operation_id"] == value["operation_id"]
-            and value["latest_attempt"]["status"] == "SUCCEEDED")
+            and value["latest_attempt"]["status"] == "SUCCEEDED"
+            and value.get("decision", {}).get("review_ready", False))
+        value["summary"] = plain_summary(value)
         return value
 
 
