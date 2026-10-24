@@ -11,7 +11,7 @@ const { chromium } = require("playwright");
 
 const ASSETS = path.resolve(__dirname, "../../deploy/cloud/assets");
 const OUT = path.resolve(process.env.UI_ARTIFACT_DIR || "artifacts/visual");
-const CASES = ["first-run", "empty-account", "backend-error"];
+const CASES = ["first-run", "empty-account", "backend-error", "malformed-account", "stale-report", "raced-account", "current-report"];
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
   { name: "mobile", width: 390, height: 844 },
@@ -69,9 +69,27 @@ function handler(req, res) {
   if (!url.pathname.startsWith("/api/")) return respond(res, 404, { status: "NOT_FOUND" });
   if (scenario === "backend-error") return respond(res, 503, { status: "STORAGE_ERROR" });
   const empty = scenario === "empty-account";
+  const hasReport = ["stale-report", "raced-account", "current-report"].includes(scenario);
+  // These fixtures emulate a protected non-demo API contract. Every amount is synthetic.
+  const modeledReport = {demo:false,qualified_online:true,session_date:"2026-10-23",
+    portfolio:{as_of:"2026-10-15",qqq_value_cny:100000,tqqq_value_cny:20000,
+      qld_value_cny:0,cash_cny:30000}};
+  const modeledStatus = {status:"SUCCEEDED",account_initialized:true,storage_verified:true,
+    qualified_online:true,audit:"PASS",research_verification:"PASS",
+    completed_at:"2026-10-24T01:00:00Z"};
+  const modelSteps = [
+    {symbol:"QQQ",label:"维持",action:"HOLD",current_weight:2/3,reference_weight:2/3,
+      current_value_cny:100000,step_reference_value_cny:100000,estimated_difference_cny:0},
+    {symbol:"TQQQ",label:"维持",action:"HOLD",current_weight:2/15,reference_weight:2/15,
+      current_value_cny:20000,step_reference_value_cny:20000,estimated_difference_cny:0},
+  ];
   const payloads = {
-    "/api/account": empty ? { account_initialized: false } : sample,
-    "/api/status": empty ?
+    "/api/account": empty ? { account_initialized: false } :
+      scenario === "malformed-account" ?
+        {...sample,values:{...sample.values,TQQQ:"not-verified"}} :
+      scenario === "raced-account" ?
+        {...sample,values:{...sample.values,QQQ:"110000"}} : sample,
+    "/api/status": hasReport ? modeledStatus : empty ?
       { status: "SETUP_REQUIRED", account_initialized: false, storage_verified: true,
         latest_run_exists: false, execution_enabled: false } :
       { status: "READY_FOR_FIRST_RUN", account_initialized: true, storage_verified: true,
@@ -81,20 +99,32 @@ function handler(req, res) {
       { status: "TWO_IN_STORE_SNAPSHOTS_RESTORABLE", current_restorable: true, older_restorable: true,
         independent_backup_verified: false, automatic_recovery_verified: false },
     "/api/brief": {
-      status: empty ? "NEEDS_ACCOUNT" : "NEEDS_VERIFIED_RUN",
-      headline: empty ? "尚未保存账户" : "等待首次真实行情核验",
+      status: hasReport ? (scenario === "stale-report" ? "MARKET_STALE" : "ACTION_REVIEW") :
+        empty ? "NEEDS_ACCOUNT" : "NEEDS_VERIFIED_RUN",
+      headline: hasReport ? (scenario === "current-report" ? "本轮可人工复核" : "历史行情已过期") :
+        empty ? "尚未保存账户" : "等待首次真实行情核验",
       explanation: "本场景为合成测试数据，不产生交易建议。",
       next_step: empty ? "先保存账户估值。" : "人工检查并运行一次监控。",
-      actionable: false, verified_run: false, steps: [], trading_enabled: false,
+      actionable: ["current-report","raced-account"].includes(scenario),verified_run:hasReport,
+      report_session:hasReport ? "2026-10-23" : null,
+      account_as_of:hasReport ? "2026-10-15" : null,
+      portfolio_total_cny:hasReport ? 150000 : null,
+      current_weights:hasReport ? {QQQ:2/3,TQQQ:2/15,QLD:0,CASH:1/5} : null,
+      steps:scenario === "current-report" ? modelSteps : [],trading_enabled:false,
     },
+    "/api/scheduler/status": {configured:true,last_result:"SUCCEEDED",
+      last_session:"2026-10-23",last_completed:"2026-10-24T01:00:00Z",
+      smtp_configured:false,trading_enabled:false},
   };
-  if (url.pathname === "/api/latest") return respond(res, 404, { status: "NEEDS_FIRST_ONLINE_RUN" });
+  if (url.pathname === "/api/latest") return hasReport ? respond(res,200,modeledReport) :
+    respond(res,404,{status:"NEEDS_FIRST_ONLINE_RUN"});
   if (Object.prototype.hasOwnProperty.call(payloads, url.pathname)) {
     return respond(res, 200, payloads[url.pathname]);
   }
   return respond(res, 404, { status: "NOT_FOUND" });
 }
 async function inspect(browser, base, scenario, vp) {
+  const hasReport = ["stale-report", "raced-account", "current-report"].includes(scenario);
   const context = await browser.newContext({
     viewport: { width: vp.width, height: vp.height },
     deviceScaleFactor: 1, reducedMotion: "reduce", colorScheme: "light",
@@ -111,6 +141,12 @@ async function inspect(browser, base, scenario, vp) {
       label + " overview missing");
     assert.ok((await page.locator("#decision-headline").innerText()).trim().length > 4,
       label + " empty decision");
+    const progress = Number(await page.locator("#proof-progress-ring").getAttribute("aria-valuenow"));
+    const expected = scenario === "backend-error" ? 0 :
+      ["empty-account","malformed-account"].includes(scenario) ? 1 :
+      scenario === "first-run" ? 2 :
+      ["stale-report","raced-account"].includes(scenario) ? 3 : 4;
+    assert.equal(progress,expected,label + " evidence progress must match API facts");
     const dims = await page.evaluate(() => ({
       vw: window.innerWidth, doc: document.documentElement.scrollWidth,
       body: document.body.scrollWidth,
@@ -128,9 +164,19 @@ async function inspect(browser, base, scenario, vp) {
           label + " synthetic account not rendered");
         assert.equal(await page.locator('[data-open-run]').first().isDisabled(), false,
           label + " manual run not available");
-      } else {
+      } else if(["empty-account","malformed-account"].includes(scenario)) {
         assert.equal(await page.locator('[data-open-run]').first().isDisabled(), true,
           label + " manual run should be disabled");
+        assert.equal(await page.locator("#metric-total").innerText(),"—",
+          label + " invalid account must not be silently displayed as zero");
+      }
+      if(["stale-report","raced-account"].includes(scenario)){
+        assert.notEqual(await page.locator("#decision-badge").innerText(),"可供人工复核",
+          label + " mismatched or stale brief exposed as actionable");
+      }
+      if(scenario === "current-report"){
+        assert.equal(await page.locator("#decision-badge").innerText(),"可供人工复核",
+          label + " verified brief blocked unexpectedly");
       }
     }
     await page.screenshot({ path: path.join(OUT, label + "-overview.png"),
@@ -160,6 +206,18 @@ async function inspect(browser, base, scenario, vp) {
         assert.match(await page.locator("#recovery-result").innerText(), /独立备份.*尚未验证/);
         await page.screenshot({ path: path.join(OUT, label + "-recovery.png"),
           fullPage: true, animations: "disabled" });
+      }
+      if (hasReport) {
+        if (vp.name === "mobile") await page.locator("#mobile-menu").click();
+        await page.locator('.nav-item[data-route="runs"]').click();
+        assert.match(await page.locator("#run-detail").innerText(), /已配置/,
+          label + " scheduler status was hardcoded instead of rendered from API");
+        if (vp.name === "mobile") await page.locator("#mobile-menu").click();
+        await page.locator('.nav-item[data-route="research"]').click();
+        const details = page.locator(".research-conditions");
+        await details.locator("summary").click();
+        assert.equal(await details.getAttribute("open"),"",
+          label + " research details cannot expand");
       }
     }
     assert.deepEqual(errors, [], label + " JavaScript runtime exceptions");
