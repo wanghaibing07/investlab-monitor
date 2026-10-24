@@ -178,6 +178,11 @@ async function inspect(browser, base, scenario, vp) {
         assert.equal(await page.locator("#decision-badge").innerText(),"可供人工复核",
           label + " verified brief blocked unexpectedly");
       }
+      if (scenario === "first-run") {
+        const ticks = await page.locator("#history-chart .chart-axis").allInnerTexts();
+        assert.equal(ticks.filter(x => x === "¥0").length, 0,
+          label + " nonzero valuation trend mislabeled as zero");
+      }
     }
     await page.screenshot({ path: path.join(OUT, label + "-overview.png"),
       fullPage: true, animations: "disabled" });
