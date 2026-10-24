@@ -353,10 +353,10 @@
     const X=i=>l+pw*(dates[i]-dates[0])/(dates[dates.length-1]-dates[0]);
     const Y=v=>t+(yMax-v)*ph/(yMax-yMin);
     const svg=document.createElementNS(svgNS,"svg");svg.setAttribute("viewBox","0 0 "+width+" "+height);svg.setAttribute("role","img");svg.setAttribute("aria-label",rows.length+" 个确认日期的账户总额走势，非投资回报率");
-    const def=document.createElementNS(svgNS,"defs");def.innerHTML='<linearGradient id="line-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8da9ff" stop-opacity=".2"/><stop offset="1" stop-color="#8da9ff" stop-opacity="0"/></linearGradient>';svg.appendChild(def);
+    const def=document.createElementNS(svgNS,"defs");def.innerHTML='<linearGradient id="line-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ec4a0" stop-opacity=".2"/><stop offset="1" stop-color="#8ec4a0" stop-opacity="0"/></linearGradient>';svg.appendChild(def);
     for(let i=0;i<=3;i++){
       const y=t+ph*i/3,grid=document.createElementNS(svgNS,"line");grid.setAttribute("x1",l);grid.setAttribute("x2",width-r);grid.setAttribute("y1",y);grid.setAttribute("y2",y);grid.setAttribute("class","chart-grid");svg.appendChild(grid);
-      const label=document.createElementNS(svgNS,"text");label.setAttribute("x",l-12);label.setAttribute("y",y+4);label.setAttribute("text-anchor","end");label.setAttribute("class","chart-axis");label.textContent=amount(yMax-(yMax-yMin)*i/3);svg.appendChild(label);
+      const label=document.createElementNS(svgNS,"text");label.setAttribute("x",l-12);label.setAttribute("y",y+4);label.setAttribute("text-anchor","end");label.setAttribute("class","chart-axis");label.textContent=amount(Math.round(yMax-(yMax-yMin)*i/3));svg.appendChild(label);
     }
     const pairs=rows.map((p,i)=>[X(i),Y(p.total)]);
     const points=pairs.map(p=>p.map(n=>n.toFixed(2)).join(",")).join(" ");
