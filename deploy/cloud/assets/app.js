@@ -3,12 +3,12 @@
   const $ = function(id){ return document.getElementById(id); };
   const $$ = function(selector){ return Array.from(document.querySelectorAll(selector)); };
   const meta = [
-    {symbol:"QQQ",name:"纳斯达克100 ETF",kind:"股票 ETF",color:"#93adff",css:"qqq",target:60},
-    {symbol:"TQQQ",name:"纳指每日3倍杠杆 ETF",kind:"杠杆 ETF",color:"#72d5c4",css:"tqqq",target:40},
-    {symbol:"QLD",name:"纳指每日2倍杠杆 ETF",kind:"杠杆 ETF",color:"#b39afd",css:"qld",target:0},
-    {symbol:"CASH",name:"人民币现金",kind:"现金",color:"#f0bd7d",css:"cash",target:0}
+    {symbol:"QQQ",name:"纳斯达克100 ETF",kind:"股票 ETF",color:"#397c60",css:"qqq",target:60},
+    {symbol:"TQQQ",name:"纳指每日3倍杠杆 ETF",kind:"杠杆 ETF",color:"#78b8a0",css:"tqqq",target:40},
+    {symbol:"QLD",name:"纳指每日2倍杠杆 ETF",kind:"杠杆 ETF",color:"#91a4b5",css:"qld",target:0},
+    {symbol:"CASH",name:"人民币现金",kind:"现金",color:"#d5aa75",css:"cash",target:0}
   ];
-  const state = {account:null,history:[],historyReady:false,status:null,report:null,brief:null,briefError:null,period:"all",busy:false,mutating:false,initial:true};
+  const state = {account:null,history:[],historyReady:false,status:null,report:null,brief:null,briefError:null,scheduler:null,period:"all",busy:false,mutating:false,initial:true};
   const nformat = new Intl.NumberFormat("zh-CN",{maximumFractionDigits:0});
   const dateformat = new Intl.DateTimeFormat("zh-CN",{year:"numeric",month:"long",day:"numeric",timeZone:"Asia/Shanghai"});
   const pages = {overview:"资产总览",portfolio:"投资组合",research:"策略与风险",runs:"运行报告",settings:"账户与设置"};
@@ -22,10 +22,24 @@
   function element(tag,cl,text){const n=document.createElement(tag);if(cl)n.className=cl;if(text!==undefined)n.textContent=text;return n;}
   function clear(node){node.replaceChildren();}
   function makeIcon(name){const wrapper=element("span");wrapper.innerHTML=icon(name);return wrapper.firstElementChild;}
-  function moneyValues(account){return account&&account.account_initialized===true&&account.values?account.values:null;}
+  function validMoneyValues(values){
+    // Missing or malformed private values must never silently render as ¥0.
+    return !!(values&&typeof values==="object"&&meta.every(m=>
+      typeof values[m.symbol]==="string"&&/^(0|[1-9]\d{0,11})$/.test(values[m.symbol])&&
+      Number.isSafeInteger(Number(values[m.symbol])))&&
+      meta.reduce((sum,m)=>sum+Number(values[m.symbol]),0)>0);
+  }
+  function moneyValues(account){
+    return account&&account.account_initialized===true&&validMoneyValues(account.values)?account.values:null;
+  }
   function total(account){const v=moneyValues(account);return v?meta.reduce((s,m)=>s+number(v[m.symbol]),0):0;}
   function weights(account){const v=moneyValues(account);const t=total(account);return Object.fromEntries(meta.map(m=>[m.symbol,t?100*number(v[m.symbol])/t:0]));}
-  function showToast(message,error){const el=$("toast");el.textContent=String(message);el.classList.toggle("error",!!error);el.hidden=false;window.clearTimeout(showToast.timeoutId);showToast.timeoutId=window.setTimeout(()=>{el.hidden=true;},6600);}
+  function showToast(message,error,verified){
+    const el=$("toast");el.textContent=String(message);
+    el.classList.toggle("error",!!error);el.classList.toggle("verified",!!verified&&!error);
+    el.hidden=false;window.clearTimeout(showToast.timeoutId);
+    showToast.timeoutId=window.setTimeout(()=>{el.hidden=true;},6600);
+  }
   function busyButton(button,isBusy,label){if(!button)return;button.disabled=isBusy;button.classList.toggle("is-spinning",!!isBusy);if(label){const target=button.querySelector("span");if(target)target.textContent=label;else button.textContent=label;}}
   async function api(path,options){
     const opts=Object.assign({credentials:"same-origin",cache:"no-store"},options||{});
@@ -52,7 +66,7 @@
     loading(true);
     $("global-error").hidden=true;
     const result=await Promise.allSettled([
-      api("/api/account"),api("/api/status"),api("/api/history"),apiOptional("/api/latest"),api("/api/brief")
+      api("/api/account"),api("/api/status"),api("/api/history"),apiOptional("/api/latest"),api("/api/brief"),api("/api/scheduler/status")
     ]);
     if(result[0].status==="fulfilled")state.account=result[0].value;
     else{state.account=null;$("global-error").hidden=false;setText("global-error-detail","账户读取失败："+result[0].reason.message+"。请确认 Vercel 登录仍有效。");}
@@ -62,6 +76,7 @@
     state.report=result[3].status==="fulfilled"?result[3].value:null;
     state.brief=result[4].status==="fulfilled"?result[4].value:null;
     state.briefError=result[4].status==="rejected"?result[4].reason.message:null;
+    state.scheduler=result[5].status==="fulfilled"?result[5].value:null;
     if(result[2].status==="rejected"&&state.account)showToast("历史记录暂时读取失败，其他账户信息可以正常查看。",true);
     if(result[1].status==="rejected"&&state.account)showToast("最新监控状态读取失败，请稍后重试。",true);
     render();
@@ -74,7 +89,34 @@
   function render(){
     renderDecision();renderOverview();renderPortfolio();renderResearch();renderRuns();renderSettings();
     for(const b of $$("[data-open-editor]"))b.disabled=!state.account;
-    for(const b of $$("[data-open-run]"))b.disabled=!(state.account&&state.account.account_initialized&&state.status&&state.status.storage_verified);
+    for(const b of $$("[data-open-run]"))b.disabled=!(moneyValues(state.account)&&state.status&&state.status.storage_verified===true);
+  }
+  function reportQuality(){
+    const s=state.status;
+    return !!(s&&s.status==="SUCCEEDED"&&s.qualified_online===true&&s.audit==="PASS"&&s.research_verification==="PASS");
+  }
+  function currentDecisionVerified(){
+    const a=state.account,values=moneyValues(a),b=state.brief,r=state.report;
+    if(!values||!reportQuality()||!b||!r||b.account_as_of!==a.as_of||
+      b.portfolio_total_cny!==total(a)||!b.current_weights||!r.portfolio||
+      r.portfolio.as_of!==a.as_of)return false;
+    const keys={QQQ:"qqq_value_cny",TQQQ:"tqqq_value_cny",QLD:"qld_value_cny",CASH:"cash_cny"};
+    if(!meta.every(m=>Number(r.portfolio[keys[m.symbol]])===Number(values[m.symbol])&&
+      typeof b.current_weights[m.symbol]==="number"&&
+      Math.abs(b.current_weights[m.symbol]-Number(values[m.symbol])/total(a))<1e-5))return false;
+    return !!(b.actionable===true&&
+      b.status==="ACTION_REVIEW"&&r&&r.demo===false&&r.qualified_online===true&&
+      b.report_session&&b.report_session===r.session_date);
+  }
+  function renderProofProgress(){
+    const checks=[!!moneyValues(state.account),!!(state.status&&state.status.storage_verified===true),
+      reportQuality(),currentDecisionVerified()];
+    const count=checks.filter(Boolean).length,ring=$("proof-progress-ring");
+    ring.style.setProperty("--progress",String(count*25));
+    ring.setAttribute("aria-valuenow",String(count));
+    ring.setAttribute("aria-valuetext",count+" / 4 项已核验；最后一项必须是当前交易日与账户一致的策略意见");
+    setText("proof-progress-count",count+"/4");
+    $("proof-progress-caption").textContent=count===4?"当前决策证据齐备":"按已读取的事实逐项核验";
   }
   function renderDecision(){
     const b=state.brief||null;
@@ -88,9 +130,14 @@
       explanation=b.explanation||"当前还没有足够的信息推导新建议。";
       next=b.next_step||"检查报告状态。";
       verified=b.verified_run===true;
-      actionable=b.actionable===true&&b.status==="ACTION_REVIEW";
+      actionable=currentDecisionVerified();
       status=actionable?(b.priority==="HOLD"?"维持观察":"可供人工复核"):(verified?"已核验·暂缓建议":"等待验证");
       when=b.report_created_at?"报告生成："+timeText(b.report_created_at):"尚无合格研究报告";
+      if(b.actionable===true&&!actionable){
+        headline="报告尚未完成本页核对";
+        explanation="当前无法同时读回真实账户、合格运行和相同交易日的研究报告。旧操作意见暂不可用。";
+        next="刷新数据并核对运行报告、账户版本和行情日期。";
+      }
     }
     setText("decision-headline",headline);setText("decision-description",explanation);
     setText("decision-next-step",next);setText("decision-report-time",when);
@@ -101,7 +148,7 @@
     $("decision-proof-status").parentElement.dataset.verified=String(actionable);
     setText("decision-session",b&&b.report_session?dateText(b.report_session):"待核验");
     setText("decision-account-date",state.account&&state.account.account_initialized?dateText(state.account.as_of):"未保存");
-    const actualPortfolio=state.account&&state.account.account_initialized===true;
+    const actualPortfolio=!!moneyValues(state.account);
     setText("decision-proof-total",actualPortfolio?amount(total(state.account)):"—");
     setText("decision-proof-total-date",actualPortfolio?"已确认估值日 "+dateText(state.account.as_of):"尚未读取真实资产");
     setText("decision-evidence",verified?"在线核验通过":"待通过");
@@ -129,6 +176,7 @@
     renderDecisionAllocation(b,actionable);
     renderHistoricalSignal(b,actionable);
     renderDecisionEvidence();
+    renderProofProgress();
   }
   function renderDecisionAllocation(brief,actionable){
     const panel=$("decision-allocation"),container=$("decision-allocation-rows");
@@ -185,12 +233,13 @@
     setText("historical-signal-description",signal.explanation);
   }
   function renderDecisionEvidence(){
-    const b=state.brief,valid=b&&b.actionable===true&&b.status==="ACTION_REVIEW";
+    const b=state.brief,valid=currentDecisionVerified();
+    const unsafe=!!(b&&b.actionable===true&&!valid);
     setText("model-gate-label",valid?"有条件可复核":b&&b.verified_run?"技术已通过，意见暂缓":"等待可信证据");
     $("model-gate-label").className="logic-label"+(valid?"":" blocked");
-    setText("model-reason-title",b?b.headline:"尚未得到完整研究结论");
-    setText("model-reason-explanation",b?b.explanation:"先保存持仓并完成行情核验。");
-    setText("model-next",b?b.next_step:"进入运行报告启动一次可信的在线监控。");
+    setText("model-reason-title",unsafe?"完整报告与账户未能对应":b?b.headline:"尚未得到完整研究结论");
+    setText("model-reason-explanation",unsafe?"本页尚未同时取得同一交易日、同一账户的可用证据。":b?b.explanation:"先保存持仓并完成行情核验。");
+    setText("model-next",unsafe?"检查报告状态后刷新重试。":b?b.next_step:"进入运行报告启动一次可信的在线监控。");
     const list=$("model-conditions");clear(list);
     if(valid&&Array.isArray(b.conditions)&&b.conditions.length){
       for(const cond of b.conditions){
@@ -205,15 +254,16 @@
       card.appendChild(element("span","","未具备当次可用的市场与账户证据，不推导本步目标比例。"));
       list.appendChild(card);
     }
-    setText("run-action-headline",b?b.headline:"等待研究报告");
-    setText("run-action-explanation",b?b.explanation+" 下一步："+b.next_step:"运行检查通过后，还需核对当前账户、行情日期及策略门槛。");
+    setText("run-action-headline",unsafe?"当前操作意见尚待完整核对":b?b.headline:"等待研究报告");
+    setText("run-action-explanation",unsafe?"暂不沿用旧配置意见。请检查账户与运行报告的一致性。":b?b.explanation+" 下一步："+b.next_step:"运行检查通过后，还需核对当前账户、行情日期及策略门槛。");
   }
   function readiness(){
     const a=state.account,s=state.status;
     if(!a)return {kind:"danger",heading:"账户读取失败",copy:"无法从私有存储读取账户，请重新登录并刷新。"};
     if(!a.account_initialized)return {kind:"info",heading:"还没有保存真实账户",copy:"先在「账户与设置」中确认人民币估值，才能开始行情核验。"};
+    if(!moneyValues(a))return {kind:"danger",heading:"账户金额需要核验",copy:"读取的金额字段缺失或格式异常，当前不能计算资产与操作建议。请先检查原始记录。"};
     if(!s||s.storage_verified!==true)return {kind:"danger",heading:"存储或监控状态未通过检查",copy:"账户存在，但尚未确认本次存储读写检查是否成功。"};
-    if(s.status==="SUCCEEDED"&&s.qualified_online===true)return {kind:state.brief&&state.brief.actionable?"ready":"info",heading:state.brief&&state.brief.actionable?"行情与策略结论已核对":"技术核验通过，策略仍需复核",copy:state.brief&&state.brief.headline?state.brief.headline:"技术 PASS 不代表立即调仓，先查看报告时点和账户一致性。"};
+    if(s.status==="SUCCEEDED"&&s.qualified_online===true)return {kind:currentDecisionVerified()?"ready":"info",heading:currentDecisionVerified()?"当前策略意见可供人工复核":"技术核验通过，当前结论仍需复核",copy:state.brief&&state.brief.headline?state.brief.headline:"技术 PASS 不代表立即调仓，先查看报告时点和账户一致性。"};
     if(s.status==="FAILED"||s.status==="STORAGE_ERROR"||s.status==="STATE_INCONSISTENT")return {kind:"danger",heading:"最近一次监控尚未通过",copy:"请到运行报告查看失败状态。本页面不会把未经验证的数据标记为成功。"};
     return {kind:"info",heading:"账户已就绪，等待首次行情核验",copy:"持仓已保存并可读取；运行一次真实监控后才会出现可信的分析报告。"};
   }
@@ -228,7 +278,8 @@
     setText("metric-cash-sub",valid?percent(number(vals.CASH)/sum*100)+" · 资金缓冲":"等待账户数据");
     const latest=state.status;
     let quality="等待行情验证",qualitySub="尚无合格的在线行情报告";
-    if(latest&&latest.status==="SUCCEEDED"&&latest.qualified_online===true){quality="核验通过";qualitySub="最近一轮在线行情已通过独立检查";}
+    if(currentDecisionVerified()){quality="可人工复核";qualitySub="当前账户与有效报告已对应，仍需本人决定";}
+    else if(reportQuality()){quality="技术已核验";qualitySub=state.brief&&state.brief.headline?state.brief.headline:"当前操作意见仍待核对";}
     else if(latest&&["FAILED","STORAGE_ERROR","STATE_INCONSISTENT"].includes(latest.status)){quality="需要检查";qualitySub="最近运行或存储校验未通过";}
     setText("metric-quality",quality);setText("metric-quality-sub",qualitySub);
     const ready=readiness(),banner=$("readiness-banner");
@@ -243,7 +294,7 @@
   function renderDonut(){
     const a=state.account,values=moneyValues(a),sum=total(a);
     const pie=$("allocation-donut"),legend=$("allocation-legend");clear(legend);
-    if(!values||sum<=0){pie.style.background="#263447";setText("equity-percentage","—");
+    if(!values||sum<=0){pie.style.background="#dfe8de";setText("equity-percentage","—");
       const message=element("div","empty-chart");message.textContent="保存账户后显示实际资产分布";legend.appendChild(message);return;}
     const w=weights(a);let begin=0;const segments=[];
     for(const m of meta){const end=begin+w[m.symbol];segments.push(m.color+" "+begin.toFixed(4)+"% "+end.toFixed(4)+"%");begin=end;}
@@ -279,7 +330,8 @@
     if(!state.historyReady)return [];
     const dayMap=new Map();
     for(const item of state.history){
-      if(!item||typeof item.as_of!=="string"||!item.values)continue;
+      if(!item||typeof item.as_of!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(item.as_of)||
+        !Number.isFinite(Date.parse(item.as_of+"T00:00:00Z"))||!validMoneyValues(item.values))continue;
       const sums=meta.reduce((v,m)=>v+number(item.values[m.symbol]),0);
       if(sums>0&&!dayMap.has(item.as_of))dayMap.set(item.as_of,{date:item.as_of,total:sums});
     }
@@ -296,12 +348,15 @@
     if(rows.length<2){box.appendChild(emptyMessage("需要更多真实记录","至少保存两个不同日期的估值后，才绘制资产轨迹。"));return;}
     const values=rows.map(x=>x.total),min=Math.min(...values),max=Math.max(...values),pad=Math.max((max-min)*.16,max*.035,1),yMin=Math.max(0,min-pad),yMax=max+pad;
     const svgNS="http://www.w3.org/2000/svg",width=720,height=260,l=73,r=14,t=19,b=35,pw=width-l-r,ph=height-t-b;
-    const X=i=>l+pw*i/(rows.length-1),Y=v=>t+(yMax-v)*ph/(yMax-yMin);
+    // Real calendar spacing: two valuations ten days apart must not look like consecutive days.
+    const dates=rows.map(row=>Date.parse(row.date+"T00:00:00Z"));
+    const X=i=>l+pw*(dates[i]-dates[0])/(dates[dates.length-1]-dates[0]);
+    const Y=v=>t+(yMax-v)*ph/(yMax-yMin);
     const svg=document.createElementNS(svgNS,"svg");svg.setAttribute("viewBox","0 0 "+width+" "+height);svg.setAttribute("role","img");svg.setAttribute("aria-label",rows.length+" 个确认日期的账户总额走势，非投资回报率");
-    const def=document.createElementNS(svgNS,"defs");def.innerHTML='<linearGradient id="line-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8da9ff" stop-opacity=".2"/><stop offset="1" stop-color="#8da9ff" stop-opacity="0"/></linearGradient>';svg.appendChild(def);
+    const def=document.createElementNS(svgNS,"defs");def.innerHTML='<linearGradient id="line-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ec4a0" stop-opacity=".2"/><stop offset="1" stop-color="#8ec4a0" stop-opacity="0"/></linearGradient>';svg.appendChild(def);
     for(let i=0;i<=3;i++){
       const y=t+ph*i/3,grid=document.createElementNS(svgNS,"line");grid.setAttribute("x1",l);grid.setAttribute("x2",width-r);grid.setAttribute("y1",y);grid.setAttribute("y2",y);grid.setAttribute("class","chart-grid");svg.appendChild(grid);
-      const label=document.createElementNS(svgNS,"text");label.setAttribute("x",l-12);label.setAttribute("y",y+4);label.setAttribute("text-anchor","end");label.setAttribute("class","chart-axis");label.textContent=amount(yMax-(yMax-yMin)*i/3);svg.appendChild(label);
+      const label=document.createElementNS(svgNS,"text");label.setAttribute("x",l-12);label.setAttribute("y",y+4);label.setAttribute("text-anchor","end");label.setAttribute("class","chart-axis");label.textContent=amount(Math.round(yMax-(yMax-yMin)*i/3));svg.appendChild(label);
     }
     const pairs=rows.map((p,i)=>[X(i),Y(p.total)]);
     const points=pairs.map(p=>p.map(n=>n.toFixed(2)).join(",")).join(" ");
@@ -312,10 +367,6 @@
       const label=document.createElementNS(svgNS,"text");label.setAttribute("x",X(i));label.setAttribute("y",height-9);label.setAttribute("text-anchor",i===0?"start":"end");label.setAttribute("class","chart-axis");label.textContent=rows[i].date.slice(5);svg.appendChild(label);
     }
     box.appendChild(svg);
-  }
-  function reportQuality(){
-    const s=state.status;
-    return !!(s&&s.status==="SUCCEEDED"&&s.qualified_online===true&&s.audit==="PASS"&&s.research_verification==="PASS");
   }
   function renderMonitor(){
     const box=$("overview-report");clear(box);
@@ -328,7 +379,7 @@
     top.appendChild(circle);top.appendChild(desc);box.appendChild(top);
     box.appendChild(element("p","monitor-explainer",pass?"你可以在「运行报告」查看本次行情截止日期、计算校验和风险指标。":s&&s.status==="FAILED"?"上次运行失败或数据质量不足。可以查看失败类型，再决定是否重新运行。":"资产记录已保存；还需要第一份合格的在线行情才能产生风险和策略结论。"));
     const rows=[
-      ["账户估值已确认",!!(state.account&&state.account.account_initialized)],
+      ["账户估值已确认",!!moneyValues(state.account)],
       ["私有存储已核验",!!(s&&s.storage_verified===true)],
       ["行情与研究独立核验",pass]
     ];
@@ -338,7 +389,7 @@
     const a=state.account,v=moneyValues(a),sum=total(a);
     setText("portfolio-total",v?amount(sum):"—");setText("portfolio-asof",v?"估值日期 "+dateText(a.as_of):"尚未保存真实资产");
     const t=$("portfolio-rows");clear(t);
-    if(!v){const row=element("tr");const cell=element("td","empty-table","请在「账户与设置」中初始化真实估值");cell.colSpan=4;row.appendChild(cell);t.appendChild(row);}
+    if(!v){const row=element("tr");const cell=element("td","empty-table",a&&a.account_initialized?"账户金额不完整，请先核验私有快照":"请在「账户与设置」中初始化真实估值");cell.colSpan=4;row.appendChild(cell);t.appendChild(row);}
     else for(const m of meta){
       const row=element("tr"),tkr=element("td"),unit=element("div","table-ticker");
       unit.appendChild(element("span","ticker-icon "+m.css,m.symbol==="CASH"?"¥":m.symbol.slice(0,1)));
@@ -353,10 +404,11 @@
     for(const item of state.history){
       const tr=element("tr"),v=item.values||{};
       tr.appendChild(element("td","",dateText(item.as_of)));
-      tr.appendChild(element("td","align-right",amount(item.total_value_cny)));
-      tr.appendChild(element("td","align-right",amount(v.QQQ)));
-      tr.appendChild(element("td","align-right",amount(v.TQQQ)));
-      tr.appendChild(element("td","align-right",amount(v.CASH)));
+      const valid=validMoneyValues(v),sum=valid?meta.reduce((s,m)=>s+number(v[m.symbol]),0):null;
+      tr.appendChild(element("td","align-right",valid?amount(sum):"待核验"));
+      tr.appendChild(element("td","align-right",valid?amount(v.QQQ):"—"));
+      tr.appendChild(element("td","align-right",valid?amount(v.TQQQ):"—"));
+      tr.appendChild(element("td","align-right",valid?amount(v.CASH):"—"));
       tr.appendChild(element("td","note-cell",item.note||"—"));
       tbody.appendChild(tr);
     }
@@ -377,10 +429,10 @@
         item.appendChild(bars);box.appendChild(item);
       }
       const key=element("div","compare-key");
-      for(const [name,color] of [["上：当前占比","#92aaff"],["下：策略目标","#6cbeac"]]){const node=element("span");const dot=element("i","legend-color");dot.style.background=color;node.appendChild(dot);node.appendChild(document.createTextNode(name));key.appendChild(node);}box.appendChild(key);
+      for(const [name,color] of [["上：当前占比","#467960"],["下：策略目标","#b7d4a0"]]){const node=element("span");const dot=element("i","legend-color");dot.style.background=color;node.appendChild(dot);node.appendChild(document.createTextNode(name));key.appendChild(node);}box.appendChild(key);
     }
     const risk=$("risk-report");clear(risk);
-    const trusted=state.brief&&state.brief.actionable===true&&state.brief.status==="ACTION_REVIEW"&&reportQuality();
+    const trusted=currentDecisionVerified();
     const metrics=trusted&&state.brief.metrics?state.brief.metrics:{};
     const actualExposure=v&&sum>0?
       100*(number(v.QQQ)+3*number(v.TQQQ)+2*number(v.QLD))/sum:null;
@@ -407,11 +459,11 @@
   function renderRuns(){
     const s=state.status,account=state.account,report=state.report,passed=reportQuality(),label=s?statusText(s.status):"等待运行状态";
     setText("run-status-title",label);
-    setText("run-status-copy",passed?"已通过独立行情核验、账本审计与研究验证。":s&&s.status==="FAILED"?"本次未完成合格报告，不会将失败结果当作投资信号。":account&&account.account_initialized?"账户已保存，现在可以手动执行首次在线监控。":"请先保存真实账户估值。");
+    setText("run-status-copy",passed?"最近一次计算通过了行情、账本与研究校验；仍需核对报告日期及是否适用于当前账户。":s&&s.status==="FAILED"?"本次未完成合格报告，不会将失败结果当作投资信号。":moneyValues(account)?"账户已保存，可在核对需要后执行在线监控。":"请先核验真实账户估值。");
     const pill=$("run-status-tag");pill.className="status-pill"+(passed?" good":s&&s.status==="FAILED"?" bad":"");pill.textContent=passed?"验证通过":s&&s.status==="FAILED"?"未通过":"等待中";
     const checks=$("run-checks");clear(checks);
     const items=[
-      ["账户已确认",account&&account.account_initialized,"从私有账户快照核对估值"],
+      ["账户已确认",!!moneyValues(account),"从私有账户快照核对估值"],
       ["私有存储已连接",s&&s.storage_verified===true,"持久化存储的读取校验"],
       ["双来源在线行情",passed,"必须通过独立行情核验"],
       ["账本和研究检查",passed&&s.audit==="PASS"&&s.research_verification==="PASS","一致性、独立验证与风险研究"]
@@ -420,11 +472,11 @@
     const detail=$("run-detail");clear(detail);
     const fields=[
       ["当前状态",label],
-      ["行情截至",passed&&report&&report.session_date?dateText(report.session_date):"等待验证"],
+      ["已保存报告交易日",passed&&report&&report.session_date?dateText(report.session_date):"等待验证"],
       ["最近运行完成",s&&s.completed_at?timeText(s.completed_at):"尚未运行"],
       ["行情合格",passed?"是":"尚未通过"],
       ["自动交易", "关闭"],
-      ["每日自动任务", "尚未启用"]
+      ["每日自动任务", state.scheduler?(state.scheduler.configured===true?"已配置 · "+String(state.scheduler.last_result||"尚无回执"):"未启用"):"状态尚未核实"]
     ];
     if(s&&s.issue_code)fields.push(["故障代号",s.issue_code]);
     if(s&&s.failure_type)fields.push(["故障类型",s.failure_type]);
@@ -432,12 +484,13 @@
   }
   function renderSettings(){
     const a=state.account,valid=!!moneyValues(a);
-    setText("settings-account-status",valid?"已确认并持久化":"尚未初始化");
+    setText("settings-account-status",valid?"已确认并持久化":a&&a.account_initialized?"金额待核验":"尚未初始化");
     setText("settings-account-date",valid?dateText(a.as_of):"—");
     setText("settings-account-total",valid?amount(total(a)):"—");
     setText("settings-confirmed",valid?timeText(a.recorded_at):"—");
     setText("settings-note",valid?a.note||"未填写":"—");
     setText("settings-storage-status",state.status&&state.status.storage_verified===true?"已核验":"待验证");
+    renderSchedulerState();
   }
   function navigate(){
     let key=window.location.hash.replace("#","");
@@ -453,6 +506,7 @@
   function openEditor(){
     const a=state.account;
     if(!a){showToast("账户状态尚未读取完成，无法保存。",true);return;}
+    if(a.account_initialized&&!moneyValues(a)){showToast("账户金额格式异常，已停止编辑。请先核验原始账户快照。",true);return;}
     const form=$("valuation-form");form.reset();$("valuation-error").hidden=true;
     const now=new Date();const iso=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(now);
     $("valuation-date").value=a.account_initialized?a.as_of:iso;
@@ -490,13 +544,19 @@
       const check=await api("/api/account");
       if(!check.account_initialized||check.state_version!==data.state_version||check.as_of!==payload.as_of||
         meta.some(m=>String(check.values[m.symbol])!==payload.values[m.symbol]))throw new Error("第二次独立读取未能确认当前快照。");
-      closeModal($("valuation-dialog"));showToast("已保存并独立回读验证："+amount(saved.total_value_cny)+"。历史版本已保留。",false);
       await loadAll();
+      if(!state.account||state.account.state_version!==data.state_version||
+        state.account.as_of!==payload.as_of||!moneyValues(state.account)||
+        meta.some(m=>String(state.account.values[m.symbol])!==payload.values[m.symbol])){
+        throw new Error("页面刷新后未能再次读回保存的版本");
+      }
+      closeModal($("valuation-dialog"));
+      showToast("保存成功 · 已完成三次一致性核对，历史版本保留。金额 "+amount(saved.total_value_cny),false,true);
     }catch(e){error.textContent="尚未确认保存成功："+e.message+"。请先刷新账户，不要连续提交。";error.hidden=false;}
     finally{state.mutating=false;busyButton(btn,false,"保存并验证");}
   }
   function openRun(){
-    if(!state.account||!state.account.account_initialized){showToast("请先保存真实账户估值。",true);return;}
+    if(!moneyValues(state.account)){showToast("请先核验并保存真实账户估值。",true);return;}
     if(state.mutating){showToast("另一个操作仍在执行，请稍后。",true);return;}
     openModal($("run-dialog"));
   }
@@ -555,26 +615,32 @@
       out.textContent="诊断请求未完成："+error.message;
     }finally{btn.disabled=false;}
   }
-  async function loadSchedulerState(){
+  function renderSchedulerState(){
     const out=$("scheduler-state"),alert=$("scheduler-alert-state");
     if(!out||!alert)return;
-    out.textContent="正在查询每日运行记录…";
-    try{
-      const x=await api("/api/scheduler/status");
-      const status=x.last_result==="SUCCEEDED"?
-        "上次运行已通过":x.last_result==="NOT_YET_RUN"?
-        "尚无每日任务运行记录":x.last_result==="FAILED"?
-        "上次自动监控失败":"最近状态："+String(x.last_result||"UNKNOWN");
-      out.textContent=(x.configured?"定时功能已配置。":"定时执行尚未启用。")+
-        " "+status+(x.last_session?"（美股 "+x.last_session+"）":"")+
-        "。只有连续实际运行记录才能证明长期稳定。";
-      alert.textContent=x.smtp_configured?
-        "故障邮件已配置；是否实际送达，需要进行一次通知测试。":
-        "故障邮件尚未配置，运行失败不会自动发邮件。";
-    }catch(error){
+    const x=state.scheduler;
+    if(!x){
       out.textContent="未能读取调度状态，不代表已启用。请检查登录和云端运行状态。";
       alert.textContent="邮件通知状态未知。";
+      return;
     }
+    const status=x.last_result==="SUCCEEDED"?
+      "上次运行已通过":x.last_result==="NOT_YET_RUN"?
+      "尚无每日任务运行记录":x.last_result==="FAILED"?
+      "上次自动监控失败":"最近状态："+String(x.last_result||"UNKNOWN");
+    out.textContent=(x.configured===true?"定时功能已配置。":"定时执行尚未启用。")+
+      " "+status+(x.last_session?"（美股 "+x.last_session+"）":"")+
+      (x.last_completed?"，回执时间 "+timeText(x.last_completed):"")+
+      "。运行配置与连续成功是两件事。";
+    alert.textContent=x.smtp_configured===true?
+      "故障邮件已配置；是否实际送达，以发送回执为准。":
+      "故障邮件尚未配置，运行失败不会自动发邮件。";
+  }
+  async function loadSchedulerState(){
+    const btn=$("refresh-scheduler-status");btn.disabled=true;
+    try{state.scheduler=await api("/api/scheduler/status");}
+    catch(error){state.scheduler=null;}
+    finally{renderSchedulerState();renderRuns();btn.disabled=false;}
   }
   async function checkRecovery(){
     const btn=$("check-recovery"),out=$("recovery-result");
@@ -616,5 +682,5 @@
     $("valuation-form").addEventListener("submit",submitValuation);$("confirm-run").addEventListener("click",submitRun);
     window.addEventListener("beforeunload",event=>{if(state.mutating){event.preventDefault();event.returnValue="";}});
   }
-  wire();loadAll();loadSchedulerState();
+  wire();loadAll();
 })();
